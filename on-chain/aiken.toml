@@ -1,0 +1,19 @@
+name = "aiken-lang/merkle-patricia-tree"
+version = "0.0.0"
+license = "MPL-2.0"
+description = "Aiken contracts for project 'aiken-lang/merkle-patricia-tree'"
+
+[repository]
+user = "aiken-lang"
+project = "merkle-patricia-tree"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "main"
+source = "github"
