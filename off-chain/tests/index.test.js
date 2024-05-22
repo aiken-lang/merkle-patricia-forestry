@@ -4,95 +4,37 @@ import * as helpers from '../lib/helpers.js';
 import { inspect } from 'node:util';
 
 const FRUITS_LIST = [
-    'apple',
-    'banana',
-    'blackberry',
-    'blueberry',
-    'cherry',
-    'coconut',
-    'cranberry',
-    'durian',
-    'fig',
-    'grape',
-    'grapefruit',
-    'guava',
-    'kiwi',
-    'kumquat',
-    'lemon',
-    'lime',
-    'mango',
-    'orange',
-    'papaya',
-    'passionfruit',
-    'peach',
-    'pear',
-    'pineapple',
-    'plum',
-    'pomegranate',
-    'raspberry',
-    'strawberry',
-    'watermelon',
+  'apple (0)',
+  'apricot (0)',
+  'banana (328)',
+  'blackberry (0)',
+  'blueberry (92383)',
+  'cherry (0)',
+  'coconut (0)',
+  'cranberry (0)',
+  'durian (0)',
+  'fig (0)',
+  'grape (110606)',
+  'grapefruit (0)',
+  'guava (0)',
+  'kiwi (0)',
+  'kumquat (0)',
+  'lemon (37694)',
+  'lime (0)',
+  'mango (0)',
+  'orange (36703)',
+  'papaya (0)',
+  'passionfruit (0)',
+  'peach (0)',
+  'pear (0)',
+  'pineapple (0)',
+  'plum (0)',
+  'pomegranate (113)',
+  'raspberry (0)',
+  'strawberry (0)',
+  'watermelon (20)',
+  'yuzu (0)',
 ];
-
-// ------------------------------------------------------------------------ Leaf
-
-test('Leaf: a new Leaf is a Leaf', t => {
-  const tree = new Leaf('00000000', 'value');
-  t.true(tree instanceof Leaf);
-});
-
-test('Leaf: inspect with human-readable key', t => {
-  const tree = new Leaf('00000000', 'value');
-  t.is(inspect(tree), '00000000 → value');
-});
-
-
-// ------------------------------------------------------------------------ BranchNode
-
-test('BranchNode: is not empty', t => {
-  const tree = new BranchNode('', {
-    1: new Leaf('01', '14'),
-    2: new Leaf('02', '42'),
-  });
-  t.false(tree.isEmpty());
-});
-
-test('BranchNode: inspect a simple one-level tree', t => {
-  const tree = new BranchNode('', {
-    1: new Leaf('01', '14'),
-    2: new Leaf('02', '42'),
-  });
-  t.is(inspect(tree), unindent`
-    ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #2781af6c16c2da267d64825c0348ade4ab73927d602fd1c9459f317e63841fb8 ║
-    ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 101 → 14
-     └─ 202 → 42
-  `);
-});
-
-test('BranchNode: inspect complex trees', t => {
-  const tree = new BranchNode('0000', {
-      1: new BranchNode('01', {
-        0: new Leaf('00', '14'),
-        'f': new Leaf('ff', '1337'),
-      }),
-      2: new Leaf('02', '42'),
-      9: new Leaf('09', '999'),
-  });
-  t.is(inspect(tree), unindent`
-    ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #0e5435b5bde2452c7357a6fb2f1bce9b3c43a648c04a2f0498c07c1146bc1f6b ║
-    ╚═══════════════════════════════════════════════════════════════════╝
-     0000
-     ├─ 101 #a8048fe39838
-     │  ├─ 000 → 14
-     │  └─ fff → 1337
-     ├─ 202 → 42
-     └─ 909 → 999
-  `);
-});
-
 
 // ------------------------------------------------------------------------- Tree
 
@@ -158,16 +100,15 @@ test('Tree: cannot create proof for leaf-tree for non-existing elements', t => {
 test('Tree: can create proof for simple trees', t => {
   const values = [ 'foo', 'bar' ].map(Buffer.from);
 
-  /*
-  ╔═══════════════════════════════════════════════════════════════════╗
-  ║ #6d9a495a9352061d331fd6039e97297aec9591b291b61f4d46d28c6a9b302577 ║
-  ╚═══════════════════════════════════════════════════════════════════╝
-   ┌─ 84418..[55 digits]..e71d → bar
-   └─ b8fe9..[55 digits]..49fd → foo
-  */
   const tree = Tree.fromList(values);
-
   t.is(tree.size, 2);
+  t.is(inspect(tree), unindent`
+    ╔═══════════════════════════════════════════════════════════════════╗
+    ║ #9929a647ecd24a3080d807d7deffda4b14a48c100dd518d037885e259ae37799 ║
+    ╚═══════════════════════════════════════════════════════════════════╝
+     ┌─ 84418..[55 digits]..e71d #80980aea9d27 → bar
+     └─ b8fe9..[55 digits]..49fd #9cadc73321de → foo
+  `);
 
   const proofs = {
     foo: tree.prove('foo'),
@@ -185,188 +126,76 @@ test('Tree: can create proof for simple trees', t => {
   t.throws(() => tree.prove('foobar'));
 });
 
-test('Tree: can create proof for complex trees', t => {
-  const values = FRUITS_LIST.map(Buffer.from);
+test('Tree: checking for membership & insertion on complex tree', t => {
+  const fullTree = Tree.fromList(FRUITS_LIST);
 
-  /*
-  ╔═══════════════════════════════════════════════════════════════════╗
-  ║ #18c56d4fb717703237c19903ca4c58e94e66dd49ccaad1b20665d8a0fec7e081 ║
-  ╚═══════════════════════════════════════════════════════════════════╝
-   ┌─ 09ad7..[55 digits]..19d9 → apple
-   ├─ 12b59..[55 digits]..9386 → durian
-   ├─ 2 #98cd7528f92a
-   │  ├─ 36e5e..[54 digits]..97f6 → cranberry
-   │  └─ 9d848..[54 digits]..e47b → grapefruit
-   ├─ 3 #6f923a110c88
-   │  ├─ 70a5c..[54 digits]..bd36 → orange
-   │  └─ 9cd47..[54 digits]..9e65 → blueberry
-   ├─ 4c4ce..[55 digits]..8230 → watermelon
-   ├─ 5 #4b5ee2d337f1
-   │  ├─ 4d444..[54 digits]..9f76 → banana
-   │  └─ acb40..[54 digits]..7a07 → grape
-   ├─ 7 #dbfd99280a60
-   │  ├─ 0abba..[54 digits]..81c3 → lime
-   │  └─ 548bb..[54 digits]..f3a9 → lemon
-   ├─ 8 #6fcc4950bc99
-   │  ├─ c0dfd..[54 digits]..ae0e → pineapple
-   │  ├─ dafdb..[54 digits]..00ca → blackberry
-   │  └─ f #e1231b489fe6
-   │     ├─ 04b7b..[53 digits]..adc6 → cherry
-   │     └─ 7033a..[53 digits]..6a64 → fig
-   ├─ a #d9447ec94c48
-   │  ├─ 3d7d4..[54 digits]..f988 → kumquat
-   │  └─ a2fb0..[54 digits]..4587 → coconut
-   ├─ b8 #e9f8df4e5ca0
-   │  ├─ 884aa..[53 digits]..ad80 → raspberry
-   │  └─ aad88..[53 digits]..fcf0 → pear
-   ├─ c49a4..[55 digits]..3565 → peach
-   ├─ d #4a8837353ceb
-   │  ├─ 4a3ea..[54 digits]..7bd9 → passionfruit
-   │  └─ 8bf23..[54 digits]..eca7 → strawberry
-   ├─ e #3b6f7a6c29e1
-   │  ├─ 5a02a..[54 digits]..37b6 → papaya
-   │  └─ 6 #ba86887bf06b
-   │     ├─ 4d91f..[53 digits]..0cfe → guava
-   │     └─ 7e298..[53 digits]..d9d1 → mango
-   └─ f #177cab65ae5d
-      ├─ 3 #9a4b2591979d
-      │  ├─ 2e49b..[53 digits]..9728 → pomegranate
-      │  └─ 7d2a6..[53 digits]..d578 → kiwi
-      └─ a3c8d..[54 digits]..52ff → plum
-  */
-  const tree = Tree.fromList(values);
+  t.is(inspect(fullTree), unindent`
+    ╔═══════════════════════════════════════════════════════════════════╗
+    ║ #4282aa63cc66d6161d949719b6b13448b6ce3256fc741898fed791316c204648 ║
+    ╚═══════════════════════════════════════════════════════════════════╝
+     ┌─ 066d2..[55 digits]..c160 #f25d1f3e731b → cranberry (0)
+     ├─ 138b #f2f43e90f41e
+     │  ├─ 407b7..[51 digits]..c445 #919e613fe7b9 → fig (0)
+     │  └─ c45c2..[51 digits]..769a #48ad7766c6f8 → orange (36703)
+     ├─ 3 #617f1700cff5
+     │  ├─ 378b5..[54 digits]..d05e #e9eca31fe449 → blackberry (0)
+     │  └─ f6cea..[54 digits]..9059 #4932e8645de3 → grapefruit (0)
+     ├─ 45708..[55 digits]..d238 #ff0edb5bcd46 → strawberry (0)
+     ├─ 55 #7bb9c1501ab5
+     │  ├─ 258d0..[53 digits]..5fd1 #723a329d15c8 → pear (0)
+     │  └─ d5551..[53 digits]..719c #9f1649f013cf → banana (328)
+     ├─ 6 #07593bf01598
+     │  ├─ 29347..[54 digits]..996e #5ff4152c6c64 → plum (0)
+     │  ├─ 7642e..[54 digits]..e791 #d984adaf73f7 → guava (0)
+     │  ├─ a9150..[54 digits]..f64e #e124d5f9f4b6 → cherry (0)
+     │  └─ f4ea6..[54 digits]..473f #01a804893a0a → lime (0)
+     ├─ 7cf7b..[55 digits]..eb70 #6f90ba97b215 → apple (0)
+     ├─ 993e2..[55 digits]..b3af #a87398cb4efe → mango (0)
+     ├─ a #2c587fdcfef2
+     │  ├─ 120d7..[54 digits]..5b19 #d823212af2c8 → pineapple (0)
+     │  ├─ 454a2..[54 digits]..6a37 #fd19d19f2f77 → durian (0)
+     │  ├─ 8bf57..[54 digits]..2fca #c7d47f4ec10a → papaya (0)
+     │  ├─ 909ba..[54 digits]..1e87 #386409826e4a → apricot (0)
+     │  ├─ af5cb..[54 digits]..15c6 #064a8065a738 → kumquat (0)
+     │  └─ f7cd6..[54 digits]..b859 #8f69234c7851 → coconut (0)
+     ├─ b #176b94ba40db
+     │  ├─ a830d..[54 digits]..da75 #4663aa5b8efe → raspberry (0)
+     │  └─ d0f99..[54 digits]..4595 #dc420faa3237 → yuzu (0)
+     ├─ c8553..[55 digits]..aad3 #5361d160bd0f → peach (0)
+     ├─ e #4569ef9ae5aa
+     │  ├─ 0d9ff..[54 digits]..e35d #50e1bef1f340 → kiwi (0)
+     │  └─ 385 #32cb5b6de7fd
+     │     ├─ 22318..[51 digits]..7814 #c9002066f807 → lemon (37694)
+     │     └─ 64f70..[51 digits]..3c0b #7bdba6df08a5 → grape (110606)
+     └─ f #0f2a6b71c3cf
+        ├─ 6 #5c6a63e872c6
+        │  ├─ 74 #82c2eb613436
+        │  │  ├─ 60e1a..[51 digits]..d432 #4ee055982ee3 → passionfruit (0)
+        │  │  └─ b9b0c..[51 digits]..5b98 #1d16215a4fb8 → blueberry (92383)
+        │  └─ d8c90..[53 digits]..df1a #a54def540220 → pomegranate (113)
+        └─ 77af1..[54 digits]..ce06 #415dcee4a96c → watermelon (20)
+  `);
 
-  const proofs = FRUITS_LIST.reduce((acc, fruit) => {
-    acc[fruit.toString()] = tree.prove(fruit);
-    return acc;
-  }, {});
+  FRUITS_LIST.forEach(fruit => {
+    const previous = Tree.fromList(FRUITS_LIST.filter(x => x !== fruit));
 
-  // digest('apple') = 09ad...
-  assertProof(
-    t,
-    tree.hash,
-    proofs.apple,
-    [
-      {
-        skip: 0,
-        neighbors: Array.from('12345678abcdef').map(x => tree.childAt(x)),
-      }
-    ]
-  );
+    const proof = fullTree.prove(fruit);
 
-  // digest('lime') = 70ab...
-  assertProof(
-    t,
-    tree.hash,
-    proofs.lime,
-    [
-      {
-        skip: 0,
-        neighbors: Array.from('01234568abcdef').map(x => tree.childAt(x)),
-      },
-      {
-        skip: 0,
-        neighbors: [
-          tree.childAt('75'),
-        ]
-      },
-    ]
-  );
+    // For (re-)generating Aiken code for proofs.
+    //
+    // const fruit_name = fruit.split(' (')[0];
+    //
+    // console.log(`// ---------- ${fruit_name}\n`);
+    // console.log(`fn proof_${fruit_name}() {\n${proof.toAiken()}\n}\n`);
+    // console.log(`fn tree_without_${fruit_name}() {\n  mpt.from_root(#"${previous.hash.toString('hex')}")\n}\n\n`);
 
-  // digest('raspberry') = b888...
-  assertProof(
-    t,
-    tree.hash,
-    proofs.raspberry,
-    [
-      {
-        skip: 0,
-        neighbors: Array.from('012345678acdef').map(x => tree.childAt(x)),
-      },
-      {
-        skip: 1,
-        neighbors: [
-          tree.childAt('ba'),
-        ]
-      }
-    ]
-  );
+    // Prove membership
+    t.true(proof.verify(true).equals(fullTree.hash), fruit);
 
-  // digest('kiwi') = f37d...
-  assertProof(
-    t,
-    tree.hash,
-    proofs.kiwi,
-    [
-      {
-        skip: 0,
-        neighbors: Array.from('012345678abcde').map(x => tree.childAt(x)),
-      },
-      {
-        skip: 0,
-        neighbors: [
-          tree.childAt('fa'),
-        ]
-      },
-      {
-        skip: 0,
-        neighbors: [
-          tree.childAt('f32'),
-        ]
-      }
-    ]
-  );
-
-  // digest('mulberry') = b62c...
-  t.throws(() => tree.prove('mulberry'));
+    // Prove insertion
+    t.true(proof.verify(false).equals(previous.hash), fruit);
+  });
 });
-
-test('Tree: checking for insertion', t => {
-  /*
-   ╔═══════════════════════════════════════════════════════════════════╗
-   ║ #28264c9e300e2ec8433c07d839042b7681fe85df6ab6a83b39d5f4dbf51b3ae7 ║
-   ╚═══════════════════════════════════════════════════════════════════╝
-    ┌─ 09ad7..[55 digits]..19d9 → apple
-    └─ fa3c8..[55 digits]..52ff → plum
-  */
-  const st0 = Tree.fromList([ 'apple', 'plum' ]);
-
-  /*
-   ╔═══════════════════════════════════════════════════════════════════╗
-   ║ #a694e4b261e7650bdc9f99279ea092b3be9e6e7eb5d1bb4836ca64c9784c8259 ║
-   ╚═══════════════════════════════════════════════════════════════════╝
-    ┌─ 09ad7..[55 digits]..19d9 → apple
-    └─ f #9c0875c21f33
-       ├─ 37d2a..[54 digits]..d578 → kiwi
-       └─ a3c8d..[54 digits]..52ff → plum
-  */
-  const st1 = Tree.fromList([ 'apple', 'kiwi', 'plum' ]);
-
-  /*
-   ╔═══════════════════════════════════════════════════════════════════╗
-   ║ #b3ea3161299926db3326f74edaea9f5bc4879f2ff46eea251eeb11e60010b4c5 ║
-   ╚═══════════════════════════════════════════════════════════════════╝
-    ┌─ 09ad7..[55 digits]..19d9 → apple
-    └─ f #eb2355dcead1
-       ├─ 3 #843cadeff6b7
-       │  ├─ 2e49b..[53 digits]..9728 → pomegranate
-       │  └─ 7d2a6..[53 digits]..d578 → kiwi
-       └─ a3c8d..[54 digits]..52ff → plum
-  */
-  const st2 = Tree.fromList([ 'apple', 'pomegranate', 'kiwi', 'plum' ]);
-
-  // Insert 'kiwi' into st0
-  t.true(st1.prove('kiwi').verify(false).equals(st0.hash));
-
-  // Doesn't work if one tries to add extra elements.
-  t.false(st2.prove('kiwi').verify(false).equals(st0.hash));
-
-  // Doesn't work with proof of another element
-  t.false(st2.prove('plum').verify(false).equals(st0.hash));
-
-  // Insert 'pomegranate' into st1
-  t.true(st2.prove('pomegranate').verify(false).equals(st1.hash));
-})
 
 
 // ---------------------------------------------------------------------- Helpers
@@ -438,21 +267,25 @@ function unindent(str) {
   return lines.map(s => s.slice(n)).join('\n').trimEnd();
 }
 
+function stringifyNeighbor(x) {
+  if (x == undefined || x instanceof Buffer) {
+    return x?.toString('hex');
+  }
+
+  return { ...x, value: x.value.toString('hex') };
+}
+
+
 function assertProof(t, root, proof, expected) {
-  t.is(proof.verify().toString('hex'), root.toString('hex'));
   proof.steps.forEach((step, k) => {
     t.is(step.skip, expected[k].skip);
     t.deepEqual(
-      step.neighbors.flatMap(x => {
-        return x === undefined
-          ? []
-          : [x.toString('hex')]
-      }),
-      expected[k].neighbors.flatMap(x => {
-        return x === undefined
-          ? []
-          : [x.hash.toString('hex')];
-      }),
+      step.neighbors.map(stringifyNeighbor),
+      expected[k].neighbors.map(stringifyNeighbor),
     );
   });
+
+  t.is(proof.steps.length, expected.length);
+
+  t.is(proof.verify().toString('hex'), root.toString('hex'));
 }

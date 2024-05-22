@@ -93,9 +93,15 @@ pub type Proof =
   List<ProofStep>
 
 pub type ProofStep {
-  skip: Int,
-  neighbors: ByteArray,
-  lookup: ByteArray,
+  Branch { skip: Int, neighbors: ByteArray, mask: ByteArray }
+  Fork { skip: Int, neighbor: Neighbor }
+  Leaf { skip: Int, neighbor: ByteArray }
+}
+
+pub type Neighbor {
+  prefix: ByteArray,
+  value: ByteArray,
+  nibble: Int,
 }
 
 /// Compute the resulting hash digest from a 'Proof' associated with an
@@ -103,23 +109,37 @@ pub type ProofStep {
 /// the target tree.
 ///
 /// This can be used to check for membership of an element in a tree.
-pub fn including(value: ByteArray, proof: Proof) -> ByteArray {
+fn including(value: ByteArray, proof: Proof) -> ByteArray {
+  do_including(blake2b_256(value), 0, proof)
+}
+
+fn do_including(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   when proof is {
-    [] -> blake2b_256(value)
-    [step, ..steps] ->
-      walk(
-        blake2b_256(value),
-        0,
-        step,
-        steps,
-        fn(path, cursor, step) {
-          // NOTE
-          // The `[step]` argument given is only to bypass the empty case check
-          // on 'do_walk', and ensure we execute the logic for that particular step.
-          // It is effectively ignored just below with `_step` as a termination case.
-          walk(path, cursor, step, [step], fn(path, _cursor, _st) { path })
-        },
-      )
+    [] -> suffix(path, cursor) |> bytearray.concat(path) |> blake2b_256
+
+    [Branch { skip, neighbors, mask }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_including(path, nextCursor, steps)
+      do_branch(path, cursor, nextCursor, root, neighbors, mask)
+    }
+
+    [Fork { skip, neighbor }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_including(path, nextCursor, steps)
+      do_fork(path, cursor, nextCursor, root, neighbor)
+    }
+
+    [Leaf { skip, neighbor }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_including(path, nextCursor, steps)
+      let neighbor =
+        Neighbor {
+          prefix: suffix(neighbor, nextCursor),
+          nibble: nibble(neighbor, nextCursor - 1),
+          value: neighbor,
+        }
+      do_fork(path, cursor, nextCursor, root, neighbor)
+    }
   }
 }
 
@@ -130,127 +150,170 @@ pub fn including(value: ByteArray, proof: Proof) -> ByteArray {
 fn excluding(value: ByteArray, proof: Proof) -> ByteArray {
   when proof is {
     [] -> null_hash
-    [step, ..steps] ->
-      walk(
-        blake2b_256(value),
-        0,
-        step,
-        steps,
-        fn(path, cursor, step) {
-          // Now, when the last branch node had only two elements (i.e. neighbors.length === 1),
-          // we must treat this node as a leaf instead and take its hash directly.
-          //
-          // Otherwise, we can simply perform a normal walk considering an
-          // empty root for out element. The extra [step] is only there to bypass the first check
-          // in do_walk.
-          if bytearray.length(step.neighbors) == blake2b_256_digest_size {
-            step.neighbors
-          } else {
-            walk(path, cursor, step, [step], fn(_path, _cursor, _st) { "" })
-          }
-        },
-      )
+    _ -> do_excluding(blake2b_256(value), 0, proof)
   }
 }
 
-fn walk(
-  path: ByteArray,
-  cursor: Int,
-  step: ProofStep,
-  steps: List<ProofStep>,
-  on_last_step: fn(ByteArray, Int, ProofStep) -> ByteArray,
-) -> ByteArray {
-  when steps is {
-    [] -> on_last_step(path, cursor, step)
+fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
+  when proof is {
+    [] -> ""
 
-    [nextStep, ..nextSteps] -> {
-      let nextCursor = cursor + 1 + step.skip
+    [Branch { skip, neighbors, mask }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_excluding(path, nextCursor, steps)
+      do_branch(path, cursor, nextCursor, root, neighbors, mask)
+    }
 
-      let root = walk(path, nextCursor, nextStep, nextSteps, on_last_step)
+    [Fork { neighbor, .. }] -> {
+      let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
+      blake2b_256(bytearray.concat(prefix, neighbor.value))
+    }
 
-      let branch = nibble(path, cursor)
+    [Fork { skip, neighbor }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_excluding(path, nextCursor, steps)
+      do_fork(path, cursor, nextCursor, root, neighbor)
+    }
 
-      let node =
-        // The lookup table contains only 15 elements (the neighbors) that are
-        // 0-based index. So in case where our element is at the end:
-        //
-        // (1) There's no need to lookup, so we can shortcircuit.
-        // (2) And more importantly, we *cannot* lookup without causing
-        //     an out-of-bound index access.
-        if branch >= 15 {
-          prefix(path, cursor + 1, nextCursor)
-            |> bytearray.concat(step.neighbors)
-            |> bytearray.concat(root)
-        } else {
-          let pivot =
-            index_bytearray(step.lookup, branch) * blake2b_256_digest_size
+    [Leaf { neighbor, .. }] ->
+      suffix(neighbor, cursor)
+        |> bytearray.concat(neighbor)
+        |> blake2b_256
 
-          prefix(path, cursor + 1, nextCursor)
-            |> bytearray.concat(bytearray.take(step.neighbors, pivot))
-            |> bytearray.concat(root)
-            |> bytearray.concat(bytearray.drop(step.neighbors, pivot))
+    [Leaf { skip, neighbor }, ..steps] -> {
+      let nextCursor = cursor + 1 + skip
+      let root = do_excluding(path, nextCursor, steps)
+      let neighbor =
+        Neighbor {
+          prefix: suffix(neighbor, nextCursor),
+          nibble: nibble(neighbor, cursor),
+          value: neighbor,
         }
-
-      blake2b_256(node)
+      do_fork(path, cursor, nextCursor, root, neighbor)
     }
   }
 }
 
-test example_leaf() {
-  including("foo", []) == #"b8fe9f7f6255a6fa08f668ab632a8d081ad87983c77cd274e48ce450f0b349fd"
+fn do_branch(
+  path: ByteArray,
+  cursor: Int,
+  nextCursor: Int,
+  root: ByteArray,
+  neighbors: ByteArray,
+  mask: ByteArray,
+) -> ByteArray {
+  let branch = nibble(path, nextCursor - 1)
+
+  let prefix = nibbles(path, cursor, nextCursor - 1)
+
+  let value =
+    blake2b_256(
+      if branch == 15 {
+        bytearray.concat(neighbors, root)
+      } else {
+        let pivot = index_bytearray(mask, branch) * blake2b_256_digest_size
+        bytearray.take(neighbors, pivot)
+          |> bytearray.concat(root)
+          |> bytearray.concat(bytearray.drop(neighbors, pivot))
+      },
+    )
+
+  blake2b_256(bytearray.concat(prefix, value))
+}
+
+fn do_fork(
+  path: ByteArray,
+  cursor: Int,
+  nextCursor: Int,
+  root: ByteArray,
+  neighbor: Neighbor,
+) -> ByteArray {
+  let neighbors =
+    neighbor.prefix
+      |> bytearray.concat(neighbor.value)
+      |> blake2b_256
+
+  let branch = nibble(path, nextCursor - 1)
+
+  let prefix = nibbles(path, cursor, nextCursor - 1)
+
+  expect branch != neighbor.nibble
+
+  let value =
+    blake2b_256(
+      if branch < neighbor.nibble {
+        bytearray.concat(root, neighbors)
+      } else {
+        bytearray.concat(neighbors, root)
+      },
+    )
+
+  blake2b_256(bytearray.concat(prefix, value))
 }
 
 test example_simple_tree() {
   // ╔═══════════════════════════════════════════════════════════════════╗
-  // ║ #6d9a495a9352061d331fd6039e97297aec9591b291b61f4d46d28c6a9b302577 ║
+  // ║ #9929a647ecd24a3080d807d7deffda4b14a48c100dd518d037885e259ae37799 ║
   // ╚═══════════════════════════════════════════════════════════════════╝
-  //  ┌─ 84418..[55 digits]..e71d → bar
-  //  └─ b8fe9..[55 digits]..49fd → foo
-  let root = #"6d9a495a9352061d331fd6039e97297aec9591b291b61f4d46d28c6a9b302577"
-  let foo = #"b8fe9f7f6255a6fa08f668ab632a8d081ad87983c77cd274e48ce450f0b349fd"
+  //  ┌─ 84418..[55 digits]..e71d #80980aea9d27 → bar
+  //  └─ b8fe9..[55 digits]..49fd #9cadc73321de → foo
+  let root = #"9929a647ecd24a3080d807d7deffda4b14a48c100dd518d037885e259ae37799"
+
   let bar = #"844181b39a1b15b417243e6231381b447a3f8b44aa15fbeb845c5d716696e71d"
 
-  let proofFoo =
-    [
-      ProofStep {
-        skip: 0,
-        neighbors: bar,
-        lookup: #"000000000000000000010101010101",
-      },
-    ]
+  let foo = #"b8fe9f7f6255a6fa08f668ab632a8d081ad87983c77cd274e48ce450f0b349fd"
 
   let proofBar =
-    [
-      ProofStep {
-        skip: 0,
-        neighbors: foo,
-        lookup: #"000000000000000000000001010101",
-      },
-    ]
+    [Leaf { skip: 0, neighbor: foo }]
+
+  let proofFoo =
+    [Leaf { skip: 0, neighbor: bar }]
 
   and {
     including("foo", proofFoo) == root,
-    excluding("foo", proofFoo) == bar,
+    excluding("foo", proofFoo) == blake2b_256(bytearray.concat(bar, bar)),
     including("bar", proofBar) == root,
-    excluding("bar", proofBar) == foo,
+    excluding("bar", proofBar) == blake2b_256(bytearray.concat(foo, foo)),
   }
 }
 
-/// Computes the prefix for a given branch node, from the start and end
-/// location of two nibbles.
-fn prefix(path: ByteArray, start: Int, end: Int) -> ByteArray {
-  if start >= end {
-    ""
+fn suffix(path, cursor) {
+  if cursor % 2 == 0 {
+    bytearray.drop(path, cursor / 2)
   } else {
-    bytearray.push(prefix(path, start + 1, end), nibble(path, start))
+    nibble(path, cursor)
+      |> bytearray.push(bytearray.drop(path, ( cursor + 1 ) / 2), _)
   }
 }
 
-test examples_prefix() {
+test examples_suffix() {
   and {
-    prefix(#"0123456789", 2, 2) == #[],
-    prefix(#"0123456789", 2, 3) == #[2],
-    prefix(#"0123456789", 4, 8) == #[4, 5, 6, 7],
+    suffix(#"abcd456789", 0) == #"abcd456789",
+    suffix(#"abcd456789", 1) == #"0bcd456789",
+    suffix(#"abcd456789", 2) == #"cd456789",
+    suffix(#"abcd456789", 4) == #"456789",
+    suffix(#"abcd456789", 5) == #"056789",
+    suffix(#"abcd456789", 10) == #"",
+  }
+}
+
+/// Computes nibbles for a given branch node, from the start and end
+/// location of two position in a path.
+fn nibbles(path: ByteArray, start: Int, end: Int) -> ByteArray {
+  if start >= end {
+    #[]
+  } else {
+    bytearray.push(nibbles(path, start + 1, end), nibble(path, start))
+  }
+}
+
+test examples_nibbles() {
+  and {
+    nibbles(#"0123456789", 2, 2) == #[],
+    nibbles(#"0123456789", 2, 3) == #[2],
+    nibbles(#"0123456789", 4, 8) == #[4, 5, 6, 7],
+    nibbles(#"0123456789", 3, 6) == #[3, 4, 5],
+    nibbles(#"0123456789", 1, 7) == #[1, 2, 3, 4, 5, 6],
   }
 }
 
@@ -262,7 +325,7 @@ fn nibble(self: ByteArray, index: Int) -> Int {
   }
 }
 
-test examples_nibbles() {
+test examples_nibble() {
   and {
     nibble(#"ab", 0) == 10,
     nibble(#"ab", 1) == 11,

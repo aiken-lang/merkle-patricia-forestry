@@ -93,7 +93,7 @@ export class Tree {
       if (keyValues.length === 1) {
         const [kv] = keyValues;
         return new Leaf(
-          `${prefix}`,
+          prefix,
           kv.value,
         );
       }
@@ -127,11 +127,12 @@ export class Tree {
         }, [])))
         .map(tree => tree.isEmpty() ? undefined : tree);
 
-      return new BranchNode(`${prefix}`, children);
+      return new BranchNode(prefix, children);
     }
 
     return loop('', values.map(value => ({ key: intoKey(value), value })));
   }
+
 
   /** Conveniently access a child in the tree at the given path. A path is
    * sequence of nibbles, as an hex-encoded string.
@@ -234,7 +235,47 @@ export class Leaf extends Tree {
 
     this.size = 1;
     this.value = value;
-    this.setPrefix(prefix);
+    this.setPrefix(prefix, digest(value));
+  }
+
+
+  /** Set the prefix on a Leaf, and computes its corresponding hash. Both steps
+   * are done in lock-step because the node's hash crucially includes its prefix.
+   *
+   * @param {string} prefix A sequence of nibbles.
+   * @param {Buffer} hash A hash digest of the value.
+   * @return {Tree} A reference to the underlying tree with its prefix modified.
+   * @private
+   */
+  setPrefix(prefix, hash) {
+    // NOTE:
+    // We append the remaining prefix to the value. However, to make this
+    // step more efficient on-chain, we append it as a raw bytestring instead of
+    // an array of nibbles.
+    //
+    // If the prefix's length is odd however, we do still add one nibble, and
+    // then the rest.
+    const isOdd = prefix.length % 2 > 0;
+
+    const head = isOdd
+      ? nibbles(prefix.slice(0, 1))
+      : Buffer.from([]);
+
+    const tail = Buffer.from(isOdd
+      ? prefix.slice(1)
+      : prefix,
+      'hex'
+    );
+
+    assert(
+      hash.length === DIGEST_LENGTH,
+      `hash must be a ${DIGEST_LENGTH}-byte digest in 'setPrefix' but it is ${hash?.toString('hex')}`
+    );
+
+    this.hash = digest(Buffer.concat([head, tail, hash]));
+    this.prefix = prefix;
+
+    return this;
   }
 
 
@@ -246,25 +287,16 @@ export class Leaf extends Tree {
    * @private
    */
   [inspect.custom](depth, options, _inspect) {
+    const hash = options.stylize(
+      `#${this.hash.toString('hex').slice(0, DIGEST_SUMMARY_LENGTH)}`,
+      'special'
+    );
+
     const prefix = withEllipsis(this.prefix, PREFIX_CUTOFF, options);
 
     const value = options.stylize(this.value, 'string');
 
-    return `${prefix} → ${value}`;
-  }
-
-
-  /** Set the prefix on a tree, and computes its corresponding root hash. Both steps
-   * are done in lock-step because the node's hash crucially includes its prefix.
-   *
-   * @param {string} prefix A sequence of nibbles.
-   * @return {Tree} A reference to the underlying tree with its prefix modified.
-   * @private
-   */
-  setPrefix(prefix) {
-    this.hash = digest(this.value);
-    this.prefix = prefix;
-    return this;
+    return `${prefix} ${hash} → ${value}`;
   }
 
 
@@ -346,25 +378,35 @@ export class BranchNode extends Tree {
 
     this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
-    this.setPrefix(prefix);
+    this.setPrefix(
+      prefix,
+      digest(Buffer.concat(this.children.flatMap(
+        node => node === undefined ? [] : [node.hash]
+      ))),
+    );
   }
 
-  /** Sets the prefix and hash of the node, ensuring that the former is used to
-   * compute the latter.
+
+  /** Set the prefix on a branch, and computes its corresponding hash. Both steps
+   * are done in lock-step because the node's hash crucially includes its prefix.
    *
    * @param {string} prefix A sequence of nibbles.
-   * @return {BranchNode}
+   * @param {Buffer} hash A hash digest of the value.
+   * @return {Tree} A reference to the underlying tree with its prefix modified.
    * @private
    */
-  setPrefix(prefix) {
-    const children = this.children.flatMap(node => node === undefined ? [] : [node.hash || node]);
+  setPrefix(prefix, hash) {
+    assert(
+      hash.length === DIGEST_LENGTH,
+      `hash must be a ${DIGEST_LENGTH}-byte digest in 'setPrefix' but it is ${hash?.toString('hex')}`
+    );
 
-    this.hash = digest(Buffer.concat([nibbles(prefix), ...children]));
-
+    this.hash = digest(Buffer.concat([nibbles(prefix), hash]));
     this.prefix = prefix;
 
     return this;
   }
+
 
   /**
    * See {@link Tree.walk}
@@ -409,11 +451,11 @@ export class BranchNode extends Tree {
       options,
       inspect(head, { ...options, depth: depth + 1 }),
       branches[head.hash],
-      depth === 2 && this.prefix.length == 0 ? '┌' : '├',
+      depth === 2 && this.prefix.length === 0 ? '┌' : '├',
       '│'
     );
     if (depth === 2 && this.prefix.length > 0) {
-      first = `\n ${this.prefix.toString('hex')}${first}`
+      first = `\n ${this.prefix}${first}`
     }
 
     // ----- In-between
@@ -454,6 +496,10 @@ export class BranchNode extends Tree {
  * holds onto a *specific* value and is only valid for a *specific* {@link Tree}.
  */
 export class Proof {
+  static #TYPE_LEAF = Symbol('leaf');
+  static #TYPE_FORK = Symbol('fork');
+  static #TYPE_BRANCH = Symbol('branch');
+
   /** The value for which this proof is for.
    * @type {Buffer}
    */
@@ -493,10 +539,38 @@ export class Proof {
    * @private
    */
   rewind(target, skip, children) {
-    this.steps.unshift({
-      skip,
-      neighbors: children.flatMap(x => x?.hash.equals(target.hash) ? [] : [x?.hash]),
-    });
+    const neighbors = children.filter(x => !x?.hash.equals(target.hash));
+
+    const nonEmptyNeighbors = neighbors.filter(x => x !== undefined);
+
+    if (nonEmptyNeighbors.length === 1) {
+      const neighbor = nonEmptyNeighbors[0];
+
+      this.steps.unshift(neighbor instanceof Leaf
+        ? {
+            type: Proof.#TYPE_LEAF,
+            skip,
+            neighbor: digest(neighbor.value),
+          }
+        : {
+            type: Proof.#TYPE_FORK,
+            skip,
+            neighbor: {
+              prefix: nibbles(neighbor.prefix),
+              nibble: children.indexOf(neighbor),
+              value: digest(Buffer.concat(neighbor.children.flatMap(child =>
+                child === undefined ? [] : [child.hash]
+              ))),
+            }
+          }
+      );
+    } else {
+      this.steps.unshift({
+        type: Proof.#TYPE_BRANCH,
+        skip,
+        neighbors: neighbors.map(x => x?.hash),
+      });
+    }
 
     return this;
   }
@@ -521,69 +595,169 @@ export class Proof {
    *                  root.
    */
   verify(withElement = true) {
-    let path = intoKey(this.value);
+    const path = intoKey(this.value);
 
-    // Set the cursor at the last intersection point in the tree.
-    let cursor = this.steps.reduce((cursor, step) => {
-      return cursor + 1 + step.skip;
-    }, 0);
+    function merge(cursor, nextCursor, root, neighbors) {
+        const nibble = Number.parseInt(path[nextCursor - 1], 16);
 
-    const suffix = path.slice(cursor);
+        const nodes = neighbors.slice(0, nibble)
+          .concat(root)
+          .concat(neighbors.slice(nibble));
 
-    const zero = withElement
-      ? Leaf.prototype.setPrefix.call({ value: this.value }, suffix).hash
-      : undefined;
+        const value = Buffer.concat(nodes.filter(x => x !== undefined));
 
-    return this.steps.reduceRight((currentHash, step, ix) => {
-      cursor -= 1 + step.skip;
+        const prefix = path.slice(cursor, nextCursor - 1);
 
-      const nibble = Number.parseInt(path[cursor], 16);
+        return BranchNode.prototype.setPrefix.call({}, prefix, digest(value)).hash;
+    }
 
-      const prefix = step.skip === 0 ? '' : path.slice(cursor, cursor + step.skip);
+    if (!withElement && this.steps.length == 0) {
+      return (new Tree).hash;
+    }
 
-      const neighbors = step.neighbors.filter(x => x !== undefined);
+    const loop = (cursor, ix) => {
+      const step = this.steps[ix];
 
-      // NOTE: The only moment where 'currentHash' can be 'undefined' is during the
-      // first step, in the case where withElement was not set (i.e. === false).
-      //
-      // Now, when the last branch node had only two elements (i.e. neighbors.length === 1),
-      // we must treat this node as a leaf instead and take its hash directly.
-      if (currentHash === undefined && neighbors.length === 1) {
-        return neighbors[0];
+      // Terminal case (or first case, depending how we look at it).
+      if (step === undefined) {
+        const suffix = path.slice(cursor);
+        return withElement
+          ? Leaf.prototype.setPrefix.call({}, suffix, digest(this.value)).hash
+          : Buffer.from([]);
       }
 
-      const children = step.neighbors.slice(0, nibble)
-        .concat(currentHash === undefined ? [] : currentHash)
-        .concat(step.neighbors.slice(nibble));
+      const isLastStep = this.steps[ix + 1] === undefined;
 
-      return BranchNode.prototype.setPrefix.call({ children }, prefix).hash;
-    }, zero);
+      const nextCursor = cursor + 1 + step.skip;
+
+      const root = loop(nextCursor, ix + 1);
+
+      switch (step.type) {
+        case Proof.#TYPE_BRANCH: {
+          return merge(cursor, nextCursor, root, step.neighbors);
+        }
+
+        case Proof.#TYPE_FORK: {
+          if (!withElement && isLastStep) {
+            const prefix = Buffer.concat([Buffer.from([step.neighbor.nibble]), step.neighbor.prefix]);
+            return digest(Buffer.concat([prefix, step.neighbor.value]));
+          }
+
+          const neighbors = intoVector({
+            [step.neighbor.nibble.toString(16)]: digest(Buffer.concat([
+              step.neighbor.prefix,
+              step.neighbor.value
+            ]))
+          }, 15);
+
+          return merge(cursor, nextCursor, root, neighbors);
+        }
+
+        case Proof.#TYPE_LEAF: {
+          const path = step.neighbor.toString('hex');
+
+          if (!withElement && isLastStep) {
+            const suffix = path.slice(cursor);
+            return Leaf.prototype.setPrefix.call({}, suffix, step.neighbor).hash;
+          }
+
+          const suffix = path.slice(nextCursor);
+          const nibble = path[nextCursor - 1];
+          const neighbors = intoVector({
+            [nibble]: Leaf.prototype.setPrefix.call({}, suffix, step.neighbor).hash,
+          }, 15);
+
+          return merge(cursor, nextCursor, root, neighbors);
+        }
+
+        default:
+          throw new Error(`unknown step type ${step.type}`);
+      }
+    };
+
+    return loop(0, 0);
   }
 
 
-  /** Serialise the proof in a format that is suitable for passing to an
-   * on-chain validator.
+  /** Serialise the proof as a portable JSON.
    *
-   * @return {Buffer}
+   * @return {object}
    */
-  serialise() {
-    // TODO: rewrite to CBOR.
-    return JSON.stringify(this.steps.map(step => {
-      let nextDefined = 0;
-      const lookup = step.neighbors.map((x, ix) => {
-        const current = nextDefined
-        if (x !== undefined) {
-          nextDefined += 1;
-        }
-        return current;
-      }, {});
+  toJSON() {
+    const serialisers = {
+      [Proof.#TYPE_LEAF](step) {
+        return {
+          ...step,
+          type: step.type.description,
+          neighbor: step.neighbor.toString('hex'),
+        };
+      },
 
-      return {
-        skip: step.skip,
-        neighbors: step.neighbors.map(x => x == undefined ? '' : x.toString('hex')).join(''),
-        lookup: Buffer.from(lookup).toString('hex'),
-      };
-    }), null, 2);
+      [Proof.#TYPE_FORK](step) {
+        return {
+          ...step,
+          type: step.type.description,
+          neighbor: {
+            ...step.neighbor,
+            prefix: step.neighbor.prefix.toString('hex'),
+            value: step.neighbor.value.toString('hex'),
+          }
+        };
+      },
+
+      [Proof.#TYPE_BRANCH](step) {
+        let nextDefined = 0;
+
+        const mask = step.neighbors.map((x, ix) => {
+          const current = nextDefined
+          if (x !== undefined) {
+            nextDefined += 1;
+          }
+          return current;
+        }, {});
+
+        const neighbors = step.neighbors.map(x => x == undefined ? '' : x.toString('hex')).join('');
+
+        return {
+          ...step,
+          type: step.type.description,
+          neighbors,
+          mask: Buffer.from(mask).toString('hex'),
+        };
+      },
+    };
+
+    return this.steps.map(step => serialisers[step.type](step));
+  }
+
+
+  /** Serialise the proof as Aiken code. Mainly for debugging / testing.
+   *
+   * @return {string}
+   */
+  toAiken() {
+    const steps = this.toJSON().map(step => {
+      switch (step.type) {
+        case Proof.#TYPE_BRANCH.description: {
+          return `  Branch { skip: ${step.skip}, neighbors: #"${step.neighbors}", mask: #"${step.mask}" },\n`
+        }
+        case Proof.#TYPE_FORK.description: {
+          const neighbor = `Neighbor { nibble: ${step.neighbor.nibble}, value: #"${step.neighbor.value}", prefix: #"${step.neighbor.prefix}" }`;
+          return `  Fork { skip: ${step.skip}, neighbor: ${neighbor} },\n`
+        }
+        case Proof.#TYPE_LEAF.description: {
+          return `  Leaf { skip: ${step.skip}, neighbor: #"${step.neighbor}" },\n`
+        }
+        default:
+          throw new Error(`unknown step type ${step.type}`);
+      }
+    });
+
+    return `[ \n ${steps.join('')} ]`;
+  }
+
+  toCBOR() {
+    throw new Error('toCBOR: TODO');
   }
 }
 
