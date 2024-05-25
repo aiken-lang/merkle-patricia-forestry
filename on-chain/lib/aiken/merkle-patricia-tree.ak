@@ -1,15 +1,38 @@
-use aiken/builtin.{blake2b_256, index_bytearray}
+use aiken/builtin.{blake2b_256, index_bytearray, slice_bytearray}
 use aiken/bytearray
 use aiken/fuzz.{both, int_between}
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------- Constants
+// -----------------------------------------------------------------------------
 
 /// # of bytes
 const blake2b_256_digest_size = 32
 
-/// By convention, the hash of a null tree is the null hash
+/// By convention, the hash of a null tree is the null hash.
+///
+/// Note that we also cache trees made of empty trees to short-circuit the
+/// neighbor sparse-merkle tree calculation.
 const null_hash =
   #"0000000000000000000000000000000000000000000000000000000000000000"
 
-/// A Merkle Patricia Tree (MPT) is a structure which stores elements in a
+/// null_hash_2 = combine(null_hash, null_hash)
+const null_hash_2 =
+  #"0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761"
+
+/// null_hash_4 = combine(null_hash_2, null_hash_2)
+const null_hash_4 =
+  #"85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1"
+
+/// null_hash_8 = combine(null_hash_4, null_hash_4)
+const null_hash_8 =
+  #"b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a"
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------ Merkle Patricia Forest
+// -----------------------------------------------------------------------------
+
+/// A Merkle Patricia Trie Forest (MP) is a structure which stores elements in a
 /// radix-trie, where nodes also contains a cryptographic hash digest of the
 /// subtree they hold.
 ///
@@ -23,16 +46,16 @@ const null_hash =
 /// Here's a little table that summarizes the average and maximum size of a
 /// proof given / a number of elements, with an _overwhelming probability_.
 ///
-/// size | avg proof size | max proof size
-/// ---: | -------------: | -------------:
-///  10² |           1569 |           2970
-///  10³ |           2299 |           4455
-///  10⁴ |           3140 |           5445
-///  10⁵ |           4087 |           6930
-///  10⁶ |           4793 |           7920
-///  10⁷ |           5656 |           9405
-///  10⁸ |           6591 |          10395
-///  10⁹ |           7302 |          11880
+/// size | average proof size |
+/// ---: | -----------------: |
+///  10² |                    |
+///  10³ |                    |
+///  10⁴ |                    |
+///  10⁵ |                    |
+///  10⁶ |                    |
+///  10⁷ |                    |
+///  10⁸ |                    |
+///  10⁹ |                    |
 pub opaque type MerklePatriciaTree {
   root: ByteArray,
 }
@@ -89,11 +112,15 @@ pub fn delete(
   MerklePatriciaTree { root: excluding(value, proof) }
 }
 
+// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------- Proof
+// -----------------------------------------------------------------------------
+
 pub type Proof =
   List<ProofStep>
 
 pub type ProofStep {
-  Branch { skip: Int, neighbors: ByteArray, mask: ByteArray }
+  Branch { skip: Int, neighbors: ByteArray }
   Fork { skip: Int, neighbor: Neighbor }
   Leaf { skip: Int, neighbor: ByteArray }
 }
@@ -103,6 +130,10 @@ pub type Neighbor {
   value: ByteArray,
   nibble: Int,
 }
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------- including
+// -----------------------------------------------------------------------------
 
 /// Compute the resulting hash digest from a 'Proof' associated with an
 /// arbitrary value. If the proof is valid, the result is the root hash of
@@ -115,12 +146,12 @@ fn including(value: ByteArray, proof: Proof) -> ByteArray {
 
 fn do_including(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   when proof is {
-    [] -> suffix(path, cursor) |> bytearray.concat(path) |> blake2b_256
+    [] -> combine(suffix(path, cursor), path)
 
-    [Branch { skip, neighbors, mask }, ..steps] -> {
+    [Branch { skip, neighbors }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
       let root = do_including(path, nextCursor, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors, mask)
+      do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
@@ -143,30 +174,31 @@ fn do_including(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   }
 }
 
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------- excluding
+// -----------------------------------------------------------------------------
+
 /// Similar to [including](#including), but computes the root obtained from walking
 /// the proof without including the element.
 ///
 /// So this mainly changes the last step.
 fn excluding(value: ByteArray, proof: Proof) -> ByteArray {
-  when proof is {
-    [] -> null_hash
-    _ -> do_excluding(blake2b_256(value), 0, proof)
-  }
+  do_excluding(blake2b_256(value), 0, proof)
 }
 
 fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   when proof is {
-    [] -> ""
+    [] -> null_hash
 
-    [Branch { skip, neighbors, mask }, ..steps] -> {
+    [Branch { skip, neighbors }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
       let root = do_excluding(path, nextCursor, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors, mask)
+      do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
     [Fork { neighbor, .. }] -> {
       let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
-      blake2b_256(bytearray.concat(prefix, neighbor.value))
+      combine(prefix, neighbor.value)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
@@ -175,10 +207,7 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
 
-    [Leaf { neighbor, .. }] ->
-      suffix(neighbor, cursor)
-        |> bytearray.concat(neighbor)
-        |> blake2b_256
+    [Leaf { neighbor, .. }] -> combine(suffix(neighbor, cursor), neighbor)
 
     [Leaf { skip, neighbor }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
@@ -194,31 +223,32 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   }
 }
 
+// -----------------------------------------------------------------------------
+// --------------------------------------------------------- do_branch / do_fork
+// -----------------------------------------------------------------------------
+
 fn do_branch(
   path: ByteArray,
   cursor: Int,
   nextCursor: Int,
   root: ByteArray,
   neighbors: ByteArray,
-  mask: ByteArray,
 ) -> ByteArray {
   let branch = nibble(path, nextCursor - 1)
 
   let prefix = nibbles(path, cursor, nextCursor - 1)
 
-  let value =
-    blake2b_256(
-      if branch == 15 {
-        bytearray.concat(neighbors, root)
-      } else {
-        let pivot = index_bytearray(mask, branch) * blake2b_256_digest_size
-        bytearray.take(neighbors, pivot)
-          |> bytearray.concat(root)
-          |> bytearray.concat(bytearray.drop(neighbors, pivot))
-      },
-    )
-
-  blake2b_256(bytearray.concat(prefix, value))
+  combine(
+    prefix,
+    merkle_16(
+      branch,
+      root,
+      slice_bytearray(0, blake2b_256_digest_size, neighbors),
+      slice_bytearray(32, blake2b_256_digest_size, neighbors),
+      slice_bytearray(64, blake2b_256_digest_size, neighbors),
+      slice_bytearray(96, blake2b_256_digest_size, neighbors),
+    ),
+  )
 }
 
 fn do_fork(
@@ -228,54 +258,199 @@ fn do_fork(
   root: ByteArray,
   neighbor: Neighbor,
 ) -> ByteArray {
-  let neighbors =
-    neighbor.prefix
-      |> bytearray.concat(neighbor.value)
-      |> blake2b_256
-
   let branch = nibble(path, nextCursor - 1)
 
   let prefix = nibbles(path, cursor, nextCursor - 1)
 
   expect branch != neighbor.nibble
 
-  let value =
-    blake2b_256(
-      if branch < neighbor.nibble {
-        bytearray.concat(root, neighbors)
-      } else {
-        bytearray.concat(neighbors, root)
-      },
-    )
-
-  blake2b_256(bytearray.concat(prefix, value))
+  combine(
+    prefix,
+    sparse_merkle_16(
+      branch,
+      root,
+      neighbor.nibble,
+      combine(neighbor.prefix, neighbor.value),
+    ),
+  )
 }
 
-test example_simple_tree() {
-  // ╔═══════════════════════════════════════════════════════════════════╗
-  // ║ #9929a647ecd24a3080d807d7deffda4b14a48c100dd518d037885e259ae37799 ║
-  // ╚═══════════════════════════════════════════════════════════════════╝
-  //  ┌─ 84418..[55 digits]..e71d #80980aea9d27 → bar
-  //  └─ b8fe9..[55 digits]..49fd #9cadc73321de → foo
-  let root = #"9929a647ecd24a3080d807d7deffda4b14a48c100dd518d037885e259ae37799"
+// -----------------------------------------------------------------------------
+// --------------------------------------------------------------------- combine
+// -----------------------------------------------------------------------------
 
-  let bar = #"844181b39a1b15b417243e6231381b447a3f8b44aa15fbeb845c5d716696e71d"
+fn combine(left: ByteArray, right: ByteArray) -> ByteArray {
+  blake2b_256(bytearray.concat(left, right))
+}
 
-  let foo = #"b8fe9f7f6255a6fa08f668ab632a8d081ad87983c77cd274e48ce450f0b349fd"
-
-  let proofBar =
-    [Leaf { skip: 0, neighbor: foo }]
-
-  let proofFoo =
-    [Leaf { skip: 0, neighbor: bar }]
-
+test combine_null_hash() {
   and {
-    including("foo", proofFoo) == root,
-    excluding("foo", proofFoo) == blake2b_256(bytearray.concat(bar, bar)),
-    including("bar", proofBar) == root,
-    excluding("bar", proofBar) == blake2b_256(bytearray.concat(foo, foo)),
+    combine(null_hash, null_hash) == null_hash_2,
+    combine(null_hash_2, null_hash_2) == null_hash_4,
+    combine(null_hash_4, null_hash_4) == null_hash_8,
   }
 }
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------- merkle_xx
+// -----------------------------------------------------------------------------
+
+fn merkle_16(
+  branch: Int,
+  root: ByteArray,
+  neighbor_8: ByteArray,
+  neighbor_4: ByteArray,
+  neighbor_2: ByteArray,
+  neighbor_1: ByteArray,
+) -> ByteArray {
+  if branch <= 7 {
+    combine(
+      merkle_8(branch, root, neighbor_4, neighbor_2, neighbor_1),
+      neighbor_8,
+    )
+  } else {
+    combine(
+      neighbor_8,
+      merkle_8(branch - 8, root, neighbor_4, neighbor_2, neighbor_1),
+    )
+  }
+}
+
+fn merkle_8(
+  branch: Int,
+  root: ByteArray,
+  neighbor_4: ByteArray,
+  neighbor_2: ByteArray,
+  neighbor_1: ByteArray,
+) -> ByteArray {
+  if branch <= 3 {
+    combine(merkle_4(branch, root, neighbor_2, neighbor_1), neighbor_4)
+  } else {
+    combine(neighbor_4, merkle_4(branch - 4, root, neighbor_2, neighbor_1))
+  }
+}
+
+fn merkle_4(
+  branch: Int,
+  root: ByteArray,
+  neighbor_2: ByteArray,
+  neighbor_1: ByteArray,
+) -> ByteArray {
+  if branch <= 1 {
+    combine(merkle_2(branch, root, neighbor_1), neighbor_2)
+  } else {
+    combine(neighbor_2, merkle_2(branch - 2, root, neighbor_1))
+  }
+}
+
+fn merkle_2(branch: Int, root: ByteArray, neighbor: ByteArray) -> ByteArray {
+  if branch <= 0 {
+    combine(root, neighbor)
+  } else {
+    combine(neighbor, root)
+  }
+}
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------ sparse_merkle_xx
+// -----------------------------------------------------------------------------
+
+fn sparse_merkle_16(
+  me: Int,
+  meHash: ByteArray,
+  neighbor: Int,
+  neighborHash: ByteArray,
+) -> ByteArray {
+  if me < 8 {
+    if neighbor < 8 {
+      combine(sparse_merkle_8(me, meHash, neighbor, neighborHash), null_hash_8)
+    } else {
+      combine(
+        merkle_8(me, meHash, null_hash_4, null_hash_2, null_hash),
+        merkle_8(
+          neighbor - 8,
+          neighborHash,
+          null_hash_4,
+          null_hash_2,
+          null_hash,
+        ),
+      )
+    }
+  } else {
+    if neighbor >= 8 {
+      combine(
+        null_hash_8,
+        sparse_merkle_8(me - 8, meHash, neighbor - 8, neighborHash),
+      )
+    } else {
+      combine(
+        merkle_8(neighbor, neighborHash, null_hash_4, null_hash_2, null_hash),
+        merkle_8(me - 8, meHash, null_hash_4, null_hash_2, null_hash),
+      )
+    }
+  }
+}
+
+fn sparse_merkle_8(
+  me: Int,
+  meHash: ByteArray,
+  neighbor: Int,
+  neighborHash: ByteArray,
+) -> ByteArray {
+  if me < 4 {
+    if neighbor < 4 {
+      combine(sparse_merkle_4(me, meHash, neighbor, neighborHash), null_hash_4)
+    } else {
+      combine(
+        merkle_4(me, meHash, null_hash_2, null_hash),
+        merkle_4(neighbor - 4, neighborHash, null_hash_2, null_hash),
+      )
+    }
+  } else {
+    if neighbor >= 4 {
+      combine(
+        null_hash_4,
+        sparse_merkle_4(me - 4, meHash, neighbor - 4, neighborHash),
+      )
+    } else {
+      combine(
+        merkle_4(neighbor, neighborHash, null_hash_2, null_hash),
+        merkle_4(me - 4, meHash, null_hash_2, null_hash),
+      )
+    }
+  }
+}
+
+fn sparse_merkle_4(
+  me: Int,
+  meHash: ByteArray,
+  neighbor: Int,
+  neighborHash: ByteArray,
+) -> ByteArray {
+  if me < 2 {
+    if neighbor < 2 {
+      combine(merkle_2(me, meHash, neighborHash), null_hash_2)
+    } else {
+      combine(
+        merkle_2(me, meHash, null_hash),
+        merkle_2(neighbor - 2, neighborHash, null_hash),
+      )
+    }
+  } else {
+    if neighbor >= 2 {
+      combine(null_hash_2, merkle_2(me - 2, meHash, neighborHash))
+    } else {
+      combine(
+        merkle_2(neighbor, neighborHash, null_hash),
+        merkle_2(me - 2, meHash, null_hash),
+      )
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------- suffix
+// -----------------------------------------------------------------------------
 
 fn suffix(path, cursor) {
   if cursor % 2 == 0 {
@@ -297,6 +472,10 @@ test examples_suffix() {
   }
 }
 
+// -----------------------------------------------------------------------------
+// --------------------------------------------------------------------- nibbles
+// -----------------------------------------------------------------------------
+
 /// Computes nibbles for a given branch node, from the start and end
 /// location of two position in a path.
 fn nibbles(path: ByteArray, start: Int, end: Int) -> ByteArray {
@@ -316,6 +495,10 @@ test examples_nibbles() {
     nibbles(#"0123456789", 1, 7) == #[1, 2, 3, 4, 5, 6],
   }
 }
+
+// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------- nibble
+// -----------------------------------------------------------------------------
 
 fn nibble(self: ByteArray, index: Int) -> Int {
   if index % 2 == 0 {

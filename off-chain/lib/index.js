@@ -29,6 +29,11 @@ const DIGEST_SUMMARY_LENGTH = 12; // # of nibbles
  */
 const PREFIX_CUTOFF = 8; // # of nibbles
 
+/* By convention, the hash of empty trees is the NULL_HASH
+ */
+const NULL_HASH = Buffer.alloc(DIGEST_LENGTH);
+
+
 // ------------------------------------------------------------------------ Tree
 
 /** A Merkle Patricia Tree of radix 16.
@@ -62,7 +67,7 @@ export class Tree {
    */
   constructor() {
     this.size = 0;
-    this.hash = Buffer.alloc(DIGEST_LENGTH);
+    this.hash = NULL_HASH;
     this.prefix = '';
   }
 
@@ -378,13 +383,73 @@ export class BranchNode extends Tree {
 
     this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
-    this.setPrefix(
-      prefix,
-      digest(Buffer.concat(this.children.flatMap(
-        node => node === undefined ? [] : [node.hash]
-      ))),
-    );
+    this.setPrefix(prefix, BranchNode.merkleRoot(this.children));
   }
+
+  /**
+   * Compute the Merkle root of a Sparse-Merkle-Tree formed by a node's children.
+   *
+   * @param {Array<Tree>} children A non-empty list of child nodes to merkleize.
+   * @param {number} [size=16] An expected size. Mostly exists to provide a check
+   *                           by default; can be overridden in context that matters.
+   * @return Buffer
+   */
+  static merkleRoot(children, size = 16) {
+    let nodes = children.map(x => x?.hash ?? x ?? NULL_HASH);
+
+    let n = nodes.length;
+
+    assert(
+      n === size,
+      `trying to compute an intermediate Merkle root of ${nodes.length} nodes instead of ${size}`);
+
+    if (n === 1) {
+      return nodes[0];
+    }
+
+    assert(
+      n >= 2 && n % 2 === 0,
+      `trying to compute intermediate Merkle root of an odd number of nodes.`,
+    );
+
+    do {
+      for (let i = 0; 2 * i < n; i += 1) {
+        nodes.push(digest(Buffer.concat(nodes.splice(0, 2))));
+      }
+      n = nodes.length;
+    } while (n > 1);
+
+    return nodes[0];
+  }
+
+  /**
+   * Construct a merkle proof for a given non-empty tree.
+   *
+   * @param {Array<Buffer>} nodes A non-empty list of child nodes to merkleize.
+   * @param {number} me The index of the node we are proving
+   * @return {Array<Buffer>}
+   */
+  static merkleProof(nodes, me) {
+    assert(nodes.length > 1 && nodes.length % 2 === 0);
+    assert(Number.isInteger(me) && me >= 0 && me < nodes.length);
+
+    let neighbors = [];
+
+    let pivot = 8; let n = 8;
+    do {
+      if (me < pivot) {
+        neighbors.push(BranchNode.merkleRoot(nodes.slice(pivot, pivot + n), n))
+        pivot -= (n >> 1);
+      } else {
+        neighbors.push(BranchNode.merkleRoot(nodes.slice(pivot - n, pivot), n));
+        pivot += (n >> 1);
+      }
+      n = n >> 1;
+    } while (n >= 1);
+
+    return neighbors;
+  }
+
 
 
   /** Set the prefix on a branch, and computes its corresponding hash. Both steps
@@ -539,9 +604,13 @@ export class Proof {
    * @private
    */
   rewind(target, skip, children) {
-    const neighbors = children.filter(x => !x?.hash.equals(target.hash));
+    const me = children.findIndex(x => x?.hash.equals(target.hash));
 
-    const nonEmptyNeighbors = neighbors.filter(x => x !== undefined);
+    assert(me !== -1, `target not in children`);
+
+    const nonEmptyNeighbors = children.filter((x, ix) => {
+      return x !== undefined && !(ix === me)
+    });
 
     if (nonEmptyNeighbors.length === 1) {
       const neighbor = nonEmptyNeighbors[0];
@@ -558,9 +627,7 @@ export class Proof {
             neighbor: {
               prefix: nibbles(neighbor.prefix),
               nibble: children.indexOf(neighbor),
-              value: digest(Buffer.concat(neighbor.children.flatMap(child =>
-                child === undefined ? [] : [child.hash]
-              ))),
+              value: BranchNode.merkleRoot(neighbor.children),
             }
           }
       );
@@ -568,7 +635,7 @@ export class Proof {
       this.steps.unshift({
         type: Proof.#TYPE_BRANCH,
         skip,
-        neighbors: neighbors.map(x => x?.hash),
+        neighbors: BranchNode.merkleProof(children, me),
       });
     }
 
@@ -597,22 +664,8 @@ export class Proof {
   verify(withElement = true) {
     const path = intoKey(this.value);
 
-    function merge(cursor, nextCursor, root, neighbors) {
-        const nibble = Number.parseInt(path[nextCursor - 1], 16);
-
-        const nodes = neighbors.slice(0, nibble)
-          .concat(root)
-          .concat(neighbors.slice(nibble));
-
-        const value = Buffer.concat(nodes.filter(x => x !== undefined));
-
-        const prefix = path.slice(cursor, nextCursor - 1);
-
-        return BranchNode.prototype.setPrefix.call({}, prefix, digest(value)).hash;
-    }
-
     if (!withElement && this.steps.length == 0) {
-      return (new Tree).hash;
+      return NULL_HASH;
     }
 
     const loop = (cursor, ix) => {
@@ -623,51 +676,91 @@ export class Proof {
         const suffix = path.slice(cursor);
         return withElement
           ? Leaf.prototype.setPrefix.call({}, suffix, digest(this.value)).hash
-          : Buffer.from([]);
+          : undefined;
       }
 
       const isLastStep = this.steps[ix + 1] === undefined;
 
       const nextCursor = cursor + 1 + step.skip;
 
-      const root = loop(nextCursor, ix + 1);
+      const me = loop(nextCursor, ix + 1);
+
+      const nibble = Number.parseInt(path[nextCursor - 1], 16);
+
+      // Merge nodes together into a new (sub-)root.
+      function root(nodes) {
+        const prefix = path.slice(cursor, nextCursor - 1);
+        const merkle = BranchNode.merkleRoot(intoVector(nodes));
+        return BranchNode.prototype.setPrefix.call({}, prefix, merkle).hash;
+      }
 
       switch (step.type) {
         case Proof.#TYPE_BRANCH: {
-          return merge(cursor, nextCursor, root, step.neighbors);
+          function h(left, right) {
+            return digest(Buffer.concat([left ?? NULL_HASH, right ?? NULL_HASH]));
+          }
+
+          const [lvl1, lvl2, lvl3, lvl4] = step.neighbors;
+
+          const merkle = {
+            0: h(h(h(h(me, lvl4), lvl3), lvl2), lvl1),
+            1: h(h(h(h(lvl4, me), lvl3), lvl2), lvl1),
+            2: h(h(h(lvl3, h(me, lvl4)), lvl2), lvl1),
+            3: h(h(h(lvl3, h(lvl4, me)), lvl2), lvl1),
+            4: h(h(lvl2, h(h(me, lvl4), lvl3)), lvl1),
+            5: h(h(lvl2, h(h(lvl4, me), lvl3)), lvl1),
+            6: h(h(lvl2, h(lvl3, h(me, lvl4))), lvl1),
+            7: h(h(lvl2, h(lvl3, h(lvl4, me))), lvl1),
+            8: h(lvl1, h(h(h(me, lvl4), lvl3), lvl2)),
+            9: h(lvl1, h(h(h(lvl4, me), lvl3), lvl2)),
+            10: h(lvl1, h(h(lvl3, h(me, lvl4)), lvl2)),
+            11: h(lvl1, h(h(lvl3, h(lvl4, me)), lvl2)),
+            12: h(lvl1, h(lvl2, h(h(me, lvl4), lvl3))),
+            13: h(lvl1, h(lvl2, h(h(lvl4, me), lvl3))),
+            14: h(lvl1, h(lvl2, h(lvl3, h(me, lvl4)))),
+            15: h(lvl1, h(lvl2, h(lvl3, h(lvl4, me)))),
+          }[nibble];
+
+          const prefix = path.slice(cursor, nextCursor - 1);
+
+          return BranchNode.prototype.setPrefix.call({}, prefix, merkle).hash;
         }
 
         case Proof.#TYPE_FORK: {
           if (!withElement && isLastStep) {
-            const prefix = Buffer.concat([Buffer.from([step.neighbor.nibble]), step.neighbor.prefix]);
-            return digest(Buffer.concat([prefix, step.neighbor.value]));
+            const prefix = [Buffer.from([step.neighbor.nibble]), step.neighbor.prefix];
+            return digest(Buffer.concat([...prefix, step.neighbor.value]));
           }
 
-          const neighbors = intoVector({
-            [step.neighbor.nibble.toString(16)]: digest(Buffer.concat([
+          assert(step.neighbor.nibble !== nibble);
+
+          return root({
+            [nibble]: me,
+            [step.neighbor.nibble]: digest(Buffer.concat([
               step.neighbor.prefix,
               step.neighbor.value
             ]))
-          }, 15);
-
-          return merge(cursor, nextCursor, root, neighbors);
+          });
         }
 
         case Proof.#TYPE_LEAF: {
-          const path = step.neighbor.toString('hex');
+          const neighborPath = step.neighbor.toString('hex');
+
+          const neighborNibble = Number.parseInt(neighborPath[nextCursor - 1], 16);
+
+          assert(neighborNibble !== nibble);
 
           if (!withElement && isLastStep) {
-            const suffix = path.slice(cursor);
+            const suffix = neighborPath.slice(cursor);
             return Leaf.prototype.setPrefix.call({}, suffix, step.neighbor).hash;
           }
 
-          const suffix = path.slice(nextCursor);
-          const nibble = path[nextCursor - 1];
-          const neighbors = intoVector({
-            [nibble]: Leaf.prototype.setPrefix.call({}, suffix, step.neighbor).hash,
-          }, 15);
+          const suffix = neighborPath.slice(nextCursor);
 
-          return merge(cursor, nextCursor, root, neighbors);
+          return root({
+            [nibble]: me,
+            [neighborNibble]: Leaf.prototype.setPrefix.call({}, suffix, step.neighbor).hash,
+          });
         }
 
         default:
@@ -685,11 +778,11 @@ export class Proof {
    */
   toJSON() {
     const serialisers = {
-      [Proof.#TYPE_LEAF](step) {
+      [Proof.#TYPE_BRANCH](step) {
         return {
           ...step,
           type: step.type.description,
-          neighbor: step.neighbor.toString('hex'),
+          neighbors: step.neighbors.map(x => x?.toString('hex') ?? '').join(''),
         };
       },
 
@@ -705,24 +798,11 @@ export class Proof {
         };
       },
 
-      [Proof.#TYPE_BRANCH](step) {
-        let nextDefined = 0;
-
-        const mask = step.neighbors.map((x, ix) => {
-          const current = nextDefined
-          if (x !== undefined) {
-            nextDefined += 1;
-          }
-          return current;
-        }, {});
-
-        const neighbors = step.neighbors.map(x => x == undefined ? '' : x.toString('hex')).join('');
-
+      [Proof.#TYPE_LEAF](step) {
         return {
           ...step,
           type: step.type.description,
-          neighbors,
-          mask: Buffer.from(mask).toString('hex'),
+          neighbor: step.neighbor.toString('hex'),
         };
       },
     };
@@ -739,7 +819,7 @@ export class Proof {
     const steps = this.toJSON().map(step => {
       switch (step.type) {
         case Proof.#TYPE_BRANCH.description: {
-          return `  Branch { skip: ${step.skip}, neighbors: #"${step.neighbors}", mask: #"${step.mask}" },\n`
+          return `  Branch { skip: ${step.skip}, neighbors: #"${step.neighbors}" },\n`
         }
         case Proof.#TYPE_FORK.description: {
           const neighbor = `Neighbor { nibble: ${step.neighbor.nibble}, value: #"${step.neighbor.value}", prefix: #"${step.neighbor.prefix}" }`;
@@ -753,7 +833,7 @@ export class Proof {
       }
     });
 
-    return `[ \n ${steps.join('')} ]`;
+    return `[\n${steps.join('')}]`;
   }
 
   toCBOR() {

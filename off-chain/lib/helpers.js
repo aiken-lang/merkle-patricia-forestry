@@ -13,22 +13,21 @@ import assert from 'node:assert';
  * intoVector({ 2: 'bar' }, 3) // [undefined, undefined, 'bar']
  *
  * @param {object} obj A key:value map of nodes.
- * @param {number} [size=16] The final size of the vector.
  * @return {array}
  * @throws {AssertionError} When any key in the object is not a nibble.
  */
-export function intoVector(obj, size = 16) {
+export function intoVector(obj) {
   let vector = [];
-  for (let i = 1; i <= size; i += 1) {
+  for (let i = 1; i <= 16; i += 1) {
     vector.push(undefined);
   }
 
   for (let k in obj) {
-    const ix = Number.parseInt(k, 16);
+    const ix = Number.parseInt(k, 10);
 
     assert(
       isHexDigit(ix),
-      `object key must be an hex-digit between 0 and 15 but it was ${k}`,
+      `object key must be an integer between 0 and 15 but it was ${k}`,
     );
 
     vector[ix] = obj[k];
