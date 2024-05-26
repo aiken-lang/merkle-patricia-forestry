@@ -1,6 +1,6 @@
 use aiken/builtin.{blake2b_256, index_bytearray, slice_bytearray}
 use aiken/bytearray
-use aiken/fuzz.{both, int_between}
+use aiken/fuzz.{both, int_between, list_between}
 
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------- Constants
@@ -86,33 +86,40 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
   self.root == null_hash
 }
 
-/// Test whether an element is present in the trie. This requires a proof of inclusion
-/// for the element. The latter can be obtained off-chain from the whole trie
-/// containing the element.
-pub fn has(self: MerklePatriciaForestry, value: ByteArray, proof: Proof) -> Bool {
-  including(value, proof) == self.root
+/// Test whether an element is present in the trie with a specific value. This
+/// requires a proof of inclusion for the element. The latter can be obtained
+/// off-chain from the whole trie containing the element.
+pub fn has(
+  self: MerklePatriciaForestry,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> Bool {
+  including(key, value, proof) == self.root
 }
 
 /// Insert an element in the trie. This requires a proof of inclusion for the element.
 /// The latter can be obtained off-chain from the whole trie containing the element.
 pub fn insert(
   self: MerklePatriciaForestry,
+  key: ByteArray,
   value: ByteArray,
   proof: Proof,
 ) -> MerklePatriciaForestry {
-  expect excluding(value, proof) == self.root
-  MerklePatriciaForestry { root: including(value, proof) }
+  expect excluding(key, proof) == self.root
+  MerklePatriciaForestry { root: including(key, value, proof) }
 }
 
 /// Remove an element from the trie. This requires a proof of inclusion for the element.
 /// The latter can be obtained off-chain from the whole trie containing the element.
 pub fn delete(
   self: MerklePatriciaForestry,
+  key: ByteArray,
   value: ByteArray,
   proof: Proof,
 ) -> MerklePatriciaForestry {
-  expect including(value, proof) == self.root
-  MerklePatriciaForestry { root: excluding(value, proof) }
+  expect including(key, value, proof) == self.root
+  MerklePatriciaForestry { root: excluding(key, proof) }
 }
 
 // -----------------------------------------------------------------------------
@@ -125,13 +132,13 @@ pub type Proof =
 pub type ProofStep {
   Branch { skip: Int, neighbors: ByteArray }
   Fork { skip: Int, neighbor: Neighbor }
-  Leaf { skip: Int, neighbor: ByteArray }
+  Leaf { skip: Int, key: ByteArray, value: ByteArray }
 }
 
 pub type Neighbor {
-  prefix: ByteArray,
-  value: ByteArray,
   nibble: Int,
+  prefix: ByteArray,
+  root: ByteArray,
 }
 
 // -----------------------------------------------------------------------------
@@ -143,35 +150,42 @@ pub type Neighbor {
 /// the target trie.
 ///
 /// This can be used to check for membership of an element in a trie.
-fn including(value: ByteArray, proof: Proof) -> ByteArray {
-  do_including(blake2b_256(value), 0, proof)
+fn including(key: ByteArray, value: ByteArray, proof: Proof) -> ByteArray {
+  do_including(blake2b_256(key), blake2b_256(value), 0, proof)
 }
 
-fn do_including(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
+fn do_including(
+  path: ByteArray,
+  value: ByteArray,
+  cursor: Int,
+  proof: Proof,
+) -> ByteArray {
   when proof is {
-    [] -> combine(suffix(path, cursor), path)
+    [] -> combine(suffix(path, cursor), value)
 
     [Branch { skip, neighbors }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
-      let root = do_including(path, nextCursor, steps)
+      let root = do_including(path, value, nextCursor, steps)
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
-      let root = do_including(path, nextCursor, steps)
+      let root = do_including(path, value, nextCursor, steps)
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
 
-    [Leaf { skip, neighbor }, ..steps] -> {
+    [Leaf { skip, key, value: neighborValue }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
-      let root = do_including(path, nextCursor, steps)
+      let root = do_including(path, value, nextCursor, steps)
+
       let neighbor =
         Neighbor {
-          prefix: suffix(neighbor, nextCursor),
-          nibble: nibble(neighbor, nextCursor - 1),
-          value: neighbor,
+          prefix: suffix(key, nextCursor),
+          nibble: nibble(key, nextCursor - 1),
+          root: neighborValue,
         }
+
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
   }
@@ -185,8 +199,8 @@ fn do_including(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
 /// the proof without including the element.
 ///
 /// So this mainly changes the last step.
-fn excluding(value: ByteArray, proof: Proof) -> ByteArray {
-  do_excluding(blake2b_256(value), 0, proof)
+fn excluding(key: ByteArray, proof: Proof) -> ByteArray {
+  do_excluding(blake2b_256(key), 0, proof)
 }
 
 fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
@@ -201,7 +215,7 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
 
     [Fork { neighbor, .. }] -> {
       let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
-      combine(prefix, neighbor.value)
+      combine(prefix, neighbor.root)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
@@ -210,17 +224,19 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
 
-    [Leaf { neighbor, .. }] -> combine(suffix(neighbor, cursor), neighbor)
+    [Leaf { key, value, .. }] -> combine(suffix(key, cursor), value)
 
-    [Leaf { skip, neighbor }, ..steps] -> {
+    [Leaf { skip, key, value }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
       let root = do_excluding(path, nextCursor, steps)
+
       let neighbor =
         Neighbor {
-          prefix: suffix(neighbor, nextCursor),
-          nibble: nibble(neighbor, cursor),
-          value: neighbor,
+          prefix: suffix(key, nextCursor),
+          nibble: nibble(key, cursor),
+          root: value,
         }
+
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
   }
@@ -273,7 +289,7 @@ fn do_fork(
       branch,
       root,
       neighbor.nibble,
-      combine(neighbor.prefix, neighbor.value),
+      combine(neighbor.prefix, neighbor.root),
     ),
   )
 }
@@ -351,6 +367,19 @@ fn merkle_2(branch: Int, root: ByteArray, neighbor: ByteArray) -> ByteArray {
     combine(root, neighbor)
   } else {
     combine(neighbor, root)
+  }
+}
+
+test prop_merkle_4(nodes via list_between(fuzz.bytearray(), 4, 4)) {
+  expect [a, b, c, d] = nodes
+
+  let root = combine(combine(a, b), combine(c, d))
+
+  and {
+    merkle_4(0, a, combine(c, d), b) == root,
+    merkle_4(1, b, combine(c, d), a) == root,
+    merkle_4(2, c, combine(a, b), d) == root,
+    merkle_4(3, d, combine(a, b), c) == root,
   }
 }
 

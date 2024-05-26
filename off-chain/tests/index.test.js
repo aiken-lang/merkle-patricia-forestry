@@ -4,36 +4,36 @@ import * as helpers from '../lib/helpers.js';
 import { inspect } from 'node:util';
 
 const FRUITS_LIST = [
-  'apple (0)',
-  'apricot (0)',
-  'banana (328)',
-  'blackberry (0)',
-  'blueberry (92383)',
-  'cherry (0)',
-  'coconut (0)',
-  'cranberry (0)',
-  'durian (0)',
-  'fig (0)',
-  'grape (110606)',
-  'grapefruit (0)',
-  'guava (0)',
-  'kiwi (0)',
-  'kumquat (0)',
-  'lemon (37694)',
-  'lime (0)',
-  'mango (0)',
-  'orange (36703)',
-  'papaya (0)',
-  'passionfruit (0)',
-  'peach (0)',
-  'pear (0)',
-  'pineapple (0)',
-  'plum (0)',
-  'pomegranate (113)',
-  'raspberry (0)',
-  'strawberry (0)',
-  'watermelon (20)',
-  'yuzu (0)',
+  { key: 'apple[uid: 58]', value: '🍎' },
+  { key: 'apricot[uid: 0]', value: '🤷' },
+  { key: 'banana[uid: 218]', value: '🍌' },
+  { key: 'blueberry[uid: 0]', value: '🫐' },
+  { key: 'cherry[uid: 0]', value: '🍒' },
+  { key: 'coconut[uid: 0]', value: '🥥' },
+  { key: 'cranberry[uid: 0]', value: '🤷' },
+  { key: 'fig[uid: 68267]', value: '🤷' },
+  { key: 'grapefruit[uid: 0]', value: '🤷' },
+  { key: 'grapes[uid: 0]', value: '🍇' },
+  { key: 'guava[uid: 344]', value: '🤷' },
+  { key: 'kiwi[uid: 0]', value: '🥝' },
+  { key: 'kumquat[uid: 0]', value: '🤷' },
+  { key: 'lemon[uid: 0]', value: '🍋' },
+  { key: 'lime[uid: 0]', value: '🤷' },
+  { key: 'mango[uid: 0]', value: '🥭' },
+  { key: 'orange[uid: 0]', value: '🍊' },
+  { key: 'papaya[uid: 0]', value: '🤷' },
+  { key: 'passionfruit[uid: 0]', value: '🤷' },
+  { key: 'peach[uid: 0]', value: '🍑' },
+  { key: 'pear[uid: 0]', value: '🍐' },
+  { key: 'pineapple[uid: 12577]', value: '🍍' },
+  { key: 'plum[uid: 15492]', value: '🤷' },
+  { key: 'pomegranate[uid: 0]', value: '🤷' },
+  { key: 'raspberry[uid: 0]', value: '🤷' },
+  { key: 'strawberry[uid: 2532]', value: '🍓' },
+  { key: 'tangerine[uid: 11]', value: '🍊' },
+  { key: 'tomato[uid: 83468]', value: '🍅' },
+  { key: 'watermelon[uid: 0]', value: '🍉' },
+  { key: 'yuzu[uid: 0]', value: '🤷' },
 ];
 
 // ------------------------------------------------------------------------ Trie
@@ -53,18 +53,22 @@ test('Trie: can construct from an empty list', t => {
 });
 
 test('Trie: can be constructed from a single value', t => {
-  const values = [ 'foo' ]
-  const trie = Trie.fromList(values);
+  const pairs = [{ key: 'foo', value: 'bar' }]
+  const trie = Trie.fromList(pairs);
 
   t.true(trie instanceof Leaf);
   t.is(trie.prefix.length, 64);
-  t.is(trie.value.toString(), values[0]);
+  t.is(trie.key.toString(), pairs[0].key);
+  t.is(trie.value.toString(), pairs[0].value);
 });
 
 test('Trie: can be constructed from two values', t => {
-  const values = [ 'foo', 'bar' ];
+  const pairs = [
+    { key: 'foo', value: '14' },
+    { key: 'bar', value: '42' },
+  ];
 
-  const trie = Trie.fromList(values);
+  const trie = Trie.fromList(pairs);
 
   t.is(trie.size, 2);
   t.false(trie instanceof Leaf);
@@ -72,20 +76,19 @@ test('Trie: can be constructed from two values', t => {
   const foo = trie.children[11];
   t.true(foo instanceof Leaf);
   t.is(foo.prefix.length, 63);
-  t.is(foo.value.toString(), values[0]);
+  t.is(foo.key.toString(), pairs[0].key);
+  t.is(foo.value.toString(), pairs[0].value);
 
   const bar = trie.children[8];
   t.true(bar instanceof Leaf);
   t.is(bar.prefix.length, 63);
-  t.is(bar.value.toString(), values[1]);
+  t.is(bar.key.toString(), pairs[1].key);
+  t.is(bar.value.toString(), pairs[1].value);
 });
 
 test('Trie: can create proof for leaf-trie for existing element', t => {
-  const trie = Trie.fromList(['foo']);
+  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
   const proof = trie.prove('foo');
-
-  t.deepEqual(proof.steps, []);
-
   t.is(
     proof.verify().toString('hex'),
     trie.hash.toString('hex'),
@@ -93,21 +96,25 @@ test('Trie: can create proof for leaf-trie for existing element', t => {
 });
 
 test('Trie: cannot create proof for leaf-trie for non-existing elements', t => {
-  const trie = Trie.fromList(['foo']);
-  t.throws(() => trie.prove('bar'));
+  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
+  const proof = trie.prove('bar');
+  t.throws(() => proof.verify());
 });
 
 test('Trie: can create proof for simple tries', t => {
-  const values = [ 'foo', 'bar' ].map(Buffer.from);
+  const pairs = [
+    { key: 'foo', value: '14' },
+    { key: 'bar', value: '42' },
+  ];
 
-  const trie = Trie.fromList(values);
+  const trie = Trie.fromList(pairs);
   t.is(trie.size, 2);
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #b654ab8233d11434a115369eafaee571d10c01c615e9fd41c37c0bbc62e0b1a4 ║
+    ║ #5e68dce55d03ea2ff4093cb88e6a6c5ad5fca7943800683cfebef6007787d04c ║
     ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 84418..[55 digits]..e71d #80980aea9d27 → bar
-     └─ b8fe9..[55 digits]..49fd #9cadc73321de → foo
+     ┌─ 84418..[55 digits]..e71d #96eed322c80b { bar → 42 }
+     └─ b8fe9..[55 digits]..49fd #6fbcdcf84771 { foo → 14 }
   `);
 
   const proofs = {
@@ -116,10 +123,7 @@ test('Trie: can create proof for simple tries', t => {
   };
 
   t.true(proofs.foo.verify().equals(trie.hash));
-  t.is(proofs.foo.steps.length, 1);
-
   t.true(proofs.bar.verify().equals(trie.hash));
-  t.is(proofs.bar.steps.length, 1);
 
   t.throws(() => trie.prove('fo'));
   t.throws(() => trie.prove('ba'));
@@ -131,69 +135,74 @@ test('Trie: checking for membership & insertion on complex trie', t => {
 
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #8a66b5d3cde7b9fb5370b9fcfcd0acd12a045423ecff85b439738b6a0796d9b7 ║
+    ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
     ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 066d2..[55 digits]..c160 #f25d1f3e731b → cranberry (0)
-     ├─ 138b #4e814491dc50
-     │  ├─ 407b7..[51 digits]..c445 #919e613fe7b9 → fig (0)
-     │  └─ c45c2..[51 digits]..769a #48ad7766c6f8 → orange (36703)
-     ├─ 3 #a5631e5347a6
-     │  ├─ 378b5..[54 digits]..d05e #e9eca31fe449 → blackberry (0)
-     │  └─ f6cea..[54 digits]..9059 #4932e8645de3 → grapefruit (0)
-     ├─ 45708..[55 digits]..d238 #ff0edb5bcd46 → strawberry (0)
-     ├─ 55 #7ff262d84793
-     │  ├─ 258d0..[53 digits]..5fd1 #723a329d15c8 → pear (0)
-     │  └─ d5551..[53 digits]..719c #9f1649f013cf → banana (328)
-     ├─ 6 #d6f002e80af7
-     │  ├─ 29347..[54 digits]..996e #5ff4152c6c64 → plum (0)
-     │  ├─ 7642e..[54 digits]..e791 #d984adaf73f7 → guava (0)
-     │  ├─ a9150..[54 digits]..f64e #e124d5f9f4b6 → cherry (0)
-     │  └─ f4ea6..[54 digits]..473f #01a804893a0a → lime (0)
-     ├─ 7cf7b..[55 digits]..eb70 #6f90ba97b215 → apple (0)
-     ├─ 993e2..[55 digits]..b3af #a87398cb4efe → mango (0)
-     ├─ a #f622b17984c8
-     │  ├─ 120d7..[54 digits]..5b19 #d823212af2c8 → pineapple (0)
-     │  ├─ 454a2..[54 digits]..6a37 #fd19d19f2f77 → durian (0)
-     │  ├─ 8bf57..[54 digits]..2fca #c7d47f4ec10a → papaya (0)
-     │  ├─ 909ba..[54 digits]..1e87 #386409826e4a → apricot (0)
-     │  ├─ af5cb..[54 digits]..15c6 #064a8065a738 → kumquat (0)
-     │  └─ f7cd6..[54 digits]..b859 #8f69234c7851 → coconut (0)
-     ├─ b #58fd96cee52e
-     │  ├─ a830d..[54 digits]..da75 #4663aa5b8efe → raspberry (0)
-     │  └─ d0f99..[54 digits]..4595 #dc420faa3237 → yuzu (0)
-     ├─ c8553..[55 digits]..aad3 #5361d160bd0f → peach (0)
-     ├─ e #51255842cc98
-     │  ├─ 0d9ff..[54 digits]..e35d #50e1bef1f340 → kiwi (0)
-     │  └─ 385 #635706e95792
-     │     ├─ 22318..[51 digits]..7814 #c9002066f807 → lemon (37694)
-     │     └─ 64f70..[51 digits]..3c0b #7bdba6df08a5 → grape (110606)
-     └─ f #27d1f4677013
-        ├─ 6 #7bbac624e21f
-        │  ├─ 74 #2e2cf893f8cd
-        │  │  ├─ 60e1a..[51 digits]..d432 #4ee055982ee3 → passionfruit (0)
-        │  │  └─ b9b0c..[51 digits]..5b98 #1d16215a4fb8 → blueberry (92383)
-        │  └─ d8c90..[53 digits]..df1a #a54def540220 → pomegranate (113)
-        └─ 77af1..[54 digits]..ce06 #415dcee4a96c → watermelon (20)
+     ┌─ 0 #a8b499ebb15a
+     │  ├─ 389fd..[54 digits]..1abc #96d6ae0847f4 { mango[uid: 0] → 🥭 }
+     │  └─ 9d230..[54 digits]..9ecc #48071b791174 { lemon[uid: 0] → 🍋 }
+     ├─ 16a4 #ea27de91b695
+     │  ├─ 3a30b..[51 digits]..a968 #2da4e1ef108c { cherry[uid: 0] → 🍒 }
+     │  ├─ 8584c..[51 digits]..d4a5 #4c83b85745f7 { tomato[uid: 83468] → 🍅 }
+     │  └─ b7ce0..[51 digits]..f157 #522f6b664982 { plum[uid: 15492] → 🤷 }
+     ├─ 245 #33df330965d7
+     │  ├─ 4c787..[52 digits]..c20e #0f6146c21bf4 { pineapple[uid: 12577] → 🍍 }
+     │  ├─ a4f81..[52 digits]..90a3 #4796c959657c { pomegranate[uid: 0] → 🤷 }
+     │  └─ e3fc8..[52 digits]..e7c3 #f50a2aad6560 { strawberry[uid: 2532] → 🍓 }
+     ├─ 3e #5a5985680607
+     │  ├─ d002d..[53 digits]..f3ac #dbf6004ed27d { lime[uid: 0] → 🤷 }
+     │  └─ e659e..[53 digits]..b3b9 #83f30b498ad4 { banana[uid: 218] → 🍌 }
+     ├─ 4 #8187d8a3f1cf
+     │  ├─ 07 #4790f8833717
+     │  │  ├─ 6d8ab..[52 digits]..73ef #561a4637b19a { guava[uid: 344] → 🤷 }
+     │  │  └─ c5847..[52 digits]..4a22 #f285ef1fbb7f { kiwi[uid: 0] → 🥝 }
+     │  └─ a522f..[54 digits]..20cd #c6473b214164 { kumquat[uid: 0] → 🤷 }
+     ├─ 5 #630f527d86d1
+     │  ├─ cddcd..[54 digits]..aa9e #ebe7d10d20a2 { watermelon[uid: 0] → 🍉 }
+     │  └─ e #9b87e6b900b4
+     │     ├─ 7ccfe..[53 digits]..4440 #2b33ecc11e12 { yuzu[uid: 0] → 🤷 }
+     │     └─ d71f9..[53 digits]..26d2 #bd6f8f57f1c1 { apple[uid: 58] → 🍎 }
+     ├─ 78666..[55 digits]..7292 #84301478aa70 { raspberry[uid: 0] → 🤷 }
+     ├─ 8af48..[55 digits]..04a8 #a3721b3311f1 { tangerine[uid: 11] → 🍊 }
+     ├─ a #a13acbf54844
+     │  ├─ 4b927..[54 digits]..3c69 #96e92f4f2632 { peach[uid: 0] → 🍑 }
+     │  └─ f12 #de6db29c4829
+     │     ├─ a1017..[51 digits]..50e7 #89756ed0f250 { fig[uid: 68267] → 🤷 }
+     │     └─ ec412..[51 digits]..71fe #51ae27cca144 { passionfruit[uid: 0] → 🤷 }
+     ├─ b #ed869762c74c
+     │  ├─ 67e71..[54 digits]..c48b #c2e5213cceec { grapefruit[uid: 0] → 🤷 }
+     │  └─ 88701..[54 digits]..949e #64f57b688d7b { blueberry[uid: 0] → 🫐 }
+     ├─ c #d653df9bae61
+     │  ├─ 5dc3c..[54 digits]..a3f3 #0f186942cf0d { cranberry[uid: 0] → 🤷 }
+     │  └─ 8cac1..[54 digits]..c3ca #4bb4b456122b { orange[uid: 0] → 🍊 }
+     ├─ d #17d9adcb708f
+     │  ├─ b3047..[54 digits]..502a #e6c8d47be96a { coconut[uid: 0] → 🥥 }
+     │  └─ f779e..[54 digits]..678a #9f8acb081242 { pear[uid: 0] → 🍐 }
+     ├─ e5993..[55 digits]..c9ec #5f1fd0952856 { apricot[uid: 0] → 🤷 }
+     └─ f #209a78c802ca
+        ├─ 63c88..[54 digits]..21ca #da480b0fea67 { papaya[uid: 0] → 🤷 }
+        └─ b69c0..[54 digits]..2145 #88850a4e3205 { grapes[uid: 0] → 🍇 }
   `);
 
+  t.is(trie.size, 30);
+
   FRUITS_LIST.forEach(fruit => {
-    const proof = trie.prove(fruit);
+    const proof = trie.prove(fruit.key);
 
     // Prove membership
-    t.true(proof.verify(true).equals(trie.hash), fruit);
+    t.true(proof.verify(true).equals(trie.hash), fruit.key);
 
-    const trieWithout = Trie.fromList(FRUITS_LIST.filter(x => x !== fruit));
+    const trieWithout = Trie.fromList(FRUITS_LIST.filter(x => x.key !== fruit.key));
 
     // Prove insertion
-    t.true(proof.verify(false).equals(trieWithout.hash), fruit);
+    t.true(proof.verify(false).equals(trieWithout.hash), fruit.key);
 
     // For (re-)generating Aiken code for proofs.
     //
-    // const fruit_name = fruit.split(' (')[0];
-    //
-    // console.log(`// ---------- ${fruit_name}\n`);
-    // console.log(`fn proof_${fruit_name}() {\n${proof.toAiken()}\n}\n`);
-    // console.log(`fn trie_without_${fruit_name}() {\n  mpt.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
+    // const fruitName = fruit.key.split("[")[0];
+    // console.log(`// ---------- ${fruitName}\n`);
+    // console.log(`const ${fruitName} = "${fruit.key}"`);
+    // console.log(`fn proof_${fruitName}() {\n${proof.toAiken()}\n}\n`);
+    // console.log(`fn without_${fruitName}() {\n  mpf.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
   });
 });
 
