@@ -1,11 +1,11 @@
-name = "aiken-lang/merkle-patricia-tree"
+name = "aiken-lang/merkle-patricia-forestry"
 version = "0.0.0"
 license = "MPL-2.0"
-description = "Aiken contracts for project 'aiken-lang/merkle-patricia-tree'"
+description = "Aiken contracts for project 'aiken-lang/merkle-patricia-forestry'"
 
 [repository]
 user = "aiken-lang"
-project = "merkle-patricia-tree"
+project = "merkle-patricia-forestry"
 platform = "github"
 
 [[dependencies]]

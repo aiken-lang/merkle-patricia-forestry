@@ -9,7 +9,7 @@ use aiken/fuzz.{both, int_between}
 /// # of bytes
 const blake2b_256_digest_size = 32
 
-/// By convention, the hash of a null tree is the null hash.
+/// By convention, the hash of a null tree/trie is the null hash.
 ///
 /// Note that we also cache trees made of empty trees to short-circuit the
 /// neighbor sparse-merkle tree calculation.
@@ -32,84 +32,87 @@ const null_hash_8 =
 // ------------------------------------------------------ Merkle Patricia Forest
 // -----------------------------------------------------------------------------
 
-/// A Merkle Patricia Trie Forest (MP) is a structure which stores elements in a
-/// radix-trie, where nodes also contains a cryptographic hash digest of the
-/// subtree they hold.
+/// A Merkle Patricia Forestry (MPF) is a key:value structure which stores
+/// elements in a radix trie folowing a key, and where nodes also contains a
+/// cryptographic hash digest of the sub-trie or value they hold.
 ///
-/// This library assumes we use trie of radix 16 (hexadecimal alphabet). This
-/// means that each level in the tree has up to 16 branches.
+/// This library enforces (through hashing) that we use trie of radix 16
+/// (hexadecimal alphabet). This means that each level in the trie has up to
+/// 16 branches.
 ///
-/// Such MPTs allow for checking membership, insertion and deletion in the tree
-/// using only root hashes and a proof of inclusion. They are extremely efficient in
-/// both cpu and mem units, but as a counterpart, proofs can be quite large.
+/// An MPF allows for checking membership, non-membership, insertion and deletion
+/// in the trie using only root hashes and a succinct proofs. They are quite
+/// efficient in both cpu and mem units. And they also provide proofs that are a
+/// lot smaller than traditional Merkle Patricia Trie; proofs remain however the
+/// main limiting factor.
 ///
-/// Here's a little table that summarizes the average and maximum size of a
-/// proof given / a number of elements, with an _overwhelming probability_.
+/// Here's a little table that summarizes the average and max (with an
+/// _overwhelming probability_) proof's sizes in bytes given a number of elements.
 ///
-/// size | average proof size |
-/// ---: | -----------------: |
-///  10² |                    |
-///  10³ |                    |
-///  10⁴ |                    |
-///  10⁵ |                    |
-///  10⁶ |                    |
-///  10⁷ |                    |
-///  10⁸ |                    |
-///  10⁹ |                    |
-pub opaque type MerklePatriciaTree {
+/// size | avg proof size | max proof size
+/// ---: | -------------: | --------------:
+///  10² |          245   |            800
+///  10³ |          351   |           1184
+///  10⁴ |          457   |           1440
+///  10⁵ |          564   |           1824
+///  10⁶ |          670   |           2080
+///  10⁷ |          776   |           2464
+///  10⁸ |          882   |           2720
+///  10⁹ |          989   |           3104
+pub opaque type MerklePatriciaForestry {
   root: ByteArray,
 }
 
-/// Construct a new "tree" from its root. On-chain, we actually only need the
-/// root!
+/// Construct a new [MerklePatriciaForestry](#MerklePatriciaForestry) from its
+/// root. On-chain, we actually only need the / root
 ///
-/// The root MUST be 32-bytes long. For an empty tree, see [empty](#empty).
-pub fn from_root(root: ByteArray) -> MerklePatriciaTree {
+/// The root MUST be 32-bytes long. For an empty trie, see [empty](#empty).
+pub fn from_root(root: ByteArray) -> MerklePatriciaForestry {
   expect bytearray.length(root) == blake2b_256_digest_size
-  MerklePatriciaTree { root }
+  MerklePatriciaForestry { root }
 }
 
-/// Construct a new empty tree.
-pub fn empty() -> MerklePatriciaTree {
-  MerklePatriciaTree { root: null_hash }
+/// Construct a new empty [MerklePatriciaForestry](#MerklePatriciaForestry).
+pub fn empty() -> MerklePatriciaForestry {
+  MerklePatriciaForestry { root: null_hash }
 }
 
-/// Check whether a tree is empty.
+/// Check whether a [MerklePatriciaForestry](#MerklePatriciaForestry) is empty.
 ///
 /// ```aiken
-/// mpt.is_empty(mpt.empty()) == True
+/// mpf.is_empty(mpf.empty()) == True
 /// ```
-pub fn is_empty(self: MerklePatriciaTree) -> Bool {
+pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
   self.root == null_hash
 }
 
-/// Test whether an element is present in the tree. This requires a proof of inclusion
-/// for the element. The latter can be obtained off-chain from the whole tree
+/// Test whether an element is present in the trie. This requires a proof of inclusion
+/// for the element. The latter can be obtained off-chain from the whole trie
 /// containing the element.
-pub fn has(self: MerklePatriciaTree, value: ByteArray, proof: Proof) -> Bool {
+pub fn has(self: MerklePatriciaForestry, value: ByteArray, proof: Proof) -> Bool {
   including(value, proof) == self.root
 }
 
-/// Insert an element in the tree. This requires a proof of inclusion for the element.
-/// The latter can be obtained off-chain from the whole tree containing the element.
+/// Insert an element in the trie. This requires a proof of inclusion for the element.
+/// The latter can be obtained off-chain from the whole trie containing the element.
 pub fn insert(
-  self: MerklePatriciaTree,
+  self: MerklePatriciaForestry,
   value: ByteArray,
   proof: Proof,
-) -> MerklePatriciaTree {
+) -> MerklePatriciaForestry {
   expect excluding(value, proof) == self.root
-  MerklePatriciaTree { root: including(value, proof) }
+  MerklePatriciaForestry { root: including(value, proof) }
 }
 
-/// Remove an element from the tree. This requires a proof of inclusion for the element.
-/// The latter can be obtained off-chain from the whole tree containing the element.
+/// Remove an element from the trie. This requires a proof of inclusion for the element.
+/// The latter can be obtained off-chain from the whole trie containing the element.
 pub fn delete(
-  self: MerklePatriciaTree,
+  self: MerklePatriciaForestry,
   value: ByteArray,
   proof: Proof,
-) -> MerklePatriciaTree {
+) -> MerklePatriciaForestry {
   expect including(value, proof) == self.root
-  MerklePatriciaTree { root: excluding(value, proof) }
+  MerklePatriciaForestry { root: excluding(value, proof) }
 }
 
 // -----------------------------------------------------------------------------
@@ -137,9 +140,9 @@ pub type Neighbor {
 
 /// Compute the resulting hash digest from a 'Proof' associated with an
 /// arbitrary value. If the proof is valid, the result is the root hash of
-/// the target tree.
+/// the target trie.
 ///
-/// This can be used to check for membership of an element in a tree.
+/// This can be used to check for membership of an element in a trie.
 fn including(value: ByteArray, proof: Proof) -> ByteArray {
   do_including(blake2b_256(value), 0, proof)
 }

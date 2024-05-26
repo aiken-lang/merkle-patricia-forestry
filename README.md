@@ -1,4 +1,4 @@
-# Merkle Patricia Tree
+# Merkle Patricia Forestry
 
 ## Overview
 

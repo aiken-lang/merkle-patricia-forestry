@@ -1,10 +1,10 @@
 {
-  "name": "merkle-patricia-tree",
+  "name": "merkle-patricia-forestry",
   "version": "1.0.0",
   "private": false,
   "type": "module",
   "main": "index.mjs",
-  "repository": "https://github.com/aiken-lang/merkle-patricia-tree.git ",
+  "repository": "https://github.com/aiken-lang/merkle-patricia-forestry.git ",
   "author": "KtorZ <matthias.benkort@gmail.com>",
   "license": "MPL-2.0",
   "scripts": {

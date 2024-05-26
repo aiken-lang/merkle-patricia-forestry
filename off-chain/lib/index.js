@@ -12,45 +12,50 @@ import {
 
 export * as helpers from './helpers.js';
 
+// -----------------------------------------------------------------------------
 // ------------------------------------------------------------------- Constants
+// -----------------------------------------------------------------------------
 
 /* Size of the digest of the underlying hash algorithm.
  * @private
  */
 const DIGEST_LENGTH = 32; // # of bytes
 
-/* Number of nibbles (i.e. hex-digits) to display for intermediate hashes when inspecting a {@link Tree}.
- * @private
+/* Number of nibbles (i.e. hex-digits) to display for intermediate hashes when
+ * inspecting a {@link Trie}. @private
  */
 const DIGEST_SUMMARY_LENGTH = 12; // # of nibbles
 
-/* Maximum number of nibbles (i.e. hex-digits) to display for prefixes before adding an ellipsis
- * @private
+/* Maximum number of nibbles (i.e. hex-digits) to display for prefixes before
+ * adding an ellipsis @private
  */
 const PREFIX_CUTOFF = 8; // # of nibbles
 
-/* By convention, the hash of empty trees is the NULL_HASH
+/* By convention, the hash of empty tries / trees is the NULL_HASH
  */
 const NULL_HASH = Buffer.alloc(DIGEST_LENGTH);
 
 
-// ------------------------------------------------------------------------ Tree
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------ Trie
+// -----------------------------------------------------------------------------
 
-/** A Merkle Patricia Tree of radix 16.
+/** A Merkle Patricia Forestry is a modified Merkle Patricia Trie of radix 16
+ *  whose neighbors are stored using Sparse Merkle Trees.
  *
- *  The class {@link Tree} is used as a super-class for {@link BranchNode} and
+ *  The class {@link Trie} is used as a super-class for {@link Branch} and
  *  {@link Leaf}. One shouldn't use the latters directly and prefer methods from
- *  {@link Tree}.
+ *  {@link Trie}.
  */
-export class Tree {
-  /** The root hash of the tree.
+export class Trie {
+  /** The root hash of the trie.
    *
    * @type {Buffer}
    */
   hash;
 
-  /** The size of the tree; corresponds to the number of nodes (incl. leaves)
-   * in the tree
+  /** The size of the trie; corresponds to the number of nodes (incl. leaves)
+   * in the trie
    *
    * @type {number}
    */
@@ -62,8 +67,8 @@ export class Tree {
    */
   prefix;
 
-  /** Construct a new empty tree. This constructor is mostly useless. See
-   * {@link Tree.fromList} for constructing trees instead.
+  /** Construct a new empty trie. This constructor is mostly useless. See
+   * {@link Trie.fromList} for instead.
    */
   constructor() {
     this.size = 0;
@@ -72,7 +77,7 @@ export class Tree {
   }
 
   /**
-   * Test whether a tree is empty (i.e. holds no branch nodes or leaves).
+   * Test whether a trie is empty (i.e. holds no branch nodes or leaves).
    * @return {bool}
    */
   isEmpty() {
@@ -80,16 +85,16 @@ export class Tree {
   }
 
   /**
-   * Construct a Merkle-Patricia {@link Tree} from a list of serialized values.
+   * Construct a Merkle-Patricia {@link Trie} from a list of serialized values.
    *
    * @param {Array<Buffer|string>} values Serialized values.
-   * @return {Tree}
+   * @return {Trie}
    */
   static fromList(values) {
     function loop(branch, keyValues) {
-      // ------------------- An empty tree
+      // ------------------- An empty trie
       if (keyValues.length === 0) {
-        return new Tree();
+        return new Trie();
       }
 
       const prefix = commonPrefix(keyValues.map(kv => kv.key));
@@ -110,15 +115,16 @@ export class Tree {
         return { ...kv, key: kv.key.slice(prefix.length) };
       });
 
-      // Construct sub-trees recursively, for each remainining digits.
+      // Construct sub-tries recursively, for each remainining digits.
       //
-      // NOTE(1): We have just removed the common prefix from all children, so it
-      // safe to look at the first digit of each remaining key and route values
-      // based on that. Some branches may be empty, which we replace with 'undefined'.
+      // NOTE(1): We have just removed the common prefix from all children,
+      // so it safe to look at the first digit of each remaining key and route
+      // values based on that. Some branches may be empty, which we replace
+      // with 'undefined'.
       //
-      // NOTE(2): Because we have at least 2 values at this point, the resulting
-      // BranchNode is guaranted to have at least 2 children. They cannot be under the
-      // same branch since we have stripped their common prefix!
+      // NOTE(2): Because we have at least 2 values at this point, the
+      // resulting Branch is guaranted to have at least 2 children. They cannot
+      // be under the same branch since we have stripped their common prefix!
       const children = Array
         .from('0123456789abcdef')
         .map(digit => loop(digit, stripped.reduce((acc, kv) => {
@@ -130,52 +136,52 @@ export class Tree {
 
           return acc;
         }, [])))
-        .map(tree => tree.isEmpty() ? undefined : tree);
+        .map(trie => trie.isEmpty() ? undefined : trie);
 
-      return new BranchNode(prefix, children);
+      return new Branch(prefix, children);
     }
 
     return loop('', values.map(value => ({ key: intoKey(value), value })));
   }
 
 
-  /** Conveniently access a child in the tree at the given path. A path is
+  /** Conveniently access a child in the tries at the given path. A path is
    * sequence of nibbles, as an hex-encoded string.
    *
    * @param {string} path A sequence of nibbles.
-   * @return {Tree|undefined} A sub-tree at the given path, or nothing.
+   * @return {Trie|undefined} A sub-trie at the given path, or nothing.
    */
   childAt(path) {
-    return Array.from(path).reduce((tree, branch) => {
+    return Array.from(path).reduce((trie, branch) => {
       const nibble = Number.parseInt(branch, 16);
-      return tree?.children[nibble];
+      return trie?.children[nibble];
     }, this);
   }
 
   /**
-   * Creates a proof of inclusion of a given value in the tree.
+   * Creates a proof of inclusion of a given value in the trie.
    *
-   * @param {Buffer|string} value A serialized value from the tree.
+   * @param {Buffer|string} value A serialized value from the trie.
    * @return {Proof}
-   * @throws {AssertionError} When the value is not in the tree.
+   * @throws {AssertionError} When the value is not in the trie.
    */
   prove(value) {
     return this.walk(intoKey(value));
   }
 
-  /** Walk a tree down a given path, accumulating neighboring nodes along the
+  /** Walk a trie down a given path, accumulating neighboring nodes along the
    * way to build a proof.
    *
    * @param {string} path A sequence of nibbles.
    * @return {Proof}
-   * @throws {AssertionError} When there's no value at the given path in the tree.
+   * @throws {AssertionError} When there's no value at the given path in the trie.
    * @private
    */
   walk(path) {
-    throw new Error(`cannot walk empty tree with path ${path}`);
+    throw new Error(`cannot walk empty trie with path ${path}`);
   }
 
-  /** Format a sub-tree. This is mostly used in conjunction with inspect.
+  /** Format a sub-trie. This is mostly used in conjunction with inspect.
    * @private
    */
   format(options, body, nibble, join, vertical = ' ') {
@@ -198,7 +204,7 @@ export class Tree {
         )}`;
   }
 
-  /** A custom function for inspecting an (empty) Tree.
+  /** A custom function for inspecting an (empty) Trie.
    * @private
    */
   [inspect.custom](_depth, _options, _inspect) {
@@ -210,10 +216,10 @@ export class Tree {
 // ------------------------------------------------------------------------ Leaf
 
 /**
- * A {@link Leaf} materializes a {@link Tree} with a **single** node. Leaves
+ * A {@link Leaf} materializes a {@link Trie} with a **single** node. Leaves
  * are also the only nodes to hold values.
  */
-export class Leaf extends Tree {
+export class Leaf extends Trie {
   /** A serialized value.
    *
    * @type {Buffer}
@@ -249,7 +255,7 @@ export class Leaf extends Tree {
    *
    * @param {string} prefix A sequence of nibbles.
    * @param {Buffer} hash A hash digest of the value.
-   * @return {Tree} A reference to the underlying tree with its prefix modified.
+   * @return {Trie} A reference to the underlying trie with its prefix modified.
    * @private
    */
   setPrefix(prefix, hash) {
@@ -285,7 +291,7 @@ export class Leaf extends Tree {
 
 
   /**
-   * A custom function for inspecting a Leaf, with colors and nice formatting.
+   * A custom function for inspecting a {@link Leaf}, with colors and nice formatting.
    * See {@link https://nodejs.org/api/util.html#utilinspectobject-showhidden-depth-colors}
    * for details.
    *
@@ -305,43 +311,45 @@ export class Leaf extends Tree {
   }
 
 
-  /** See {@link Tree.walk}
+  /** See {@link Trie.walk}
    * @private
    */
   walk(path) {
     assert(
       path.startsWith(this.prefix),
-      `element at remaining path ${path} not in tree: non-matching prefix ${this.prefix}`,
+      `element at remaining path ${path} not in trie: non-matching prefix ${this.prefix}`,
     );
     return new Proof(this.value);
   }
 }
 
 
-// ------------------------------------------------------------------------ BranchNode
+// ------------------------------------------------------------------------ Branch
 
 /**
- * A {@link BranchNode} materializes a {@link Tree} with **at least two** nodes
+ * A {@link Branch} materializes a {@link Trie} with **at least two** nodes
  * and **at most** 16 nodes.
  *
  */
-export class BranchNode extends Tree {
-  /** A sparse array of child sub-trees.
+export class Branch extends Trie {
+  /** A sparse array of child sub-tries.
    *
-   * @type {Array<Tree|undefined>}
+   * @type {Array<Trie|undefined>}
    */
   children;
 
   /**
    * Create a new branch node from a (hex-encoded) prefix and 16 children.
    *
-   * @param {string} prefix The accumulated prefix, if any.
-   * @param {Array<Tree>|object} children A vector of ordered children, or a
-   *                                      key:value map of nibbles to sub-trees.
-   *                                      When specifying a vector, there must be
-   *                                      exactly 16 elements, with 'undefined' for
-   *                                      empty branches.
-   * @return {BranchNode}
+   * @param {string} prefix
+   *   The accumulated prefix, if any.
+   *
+   * @param {Array<Trie>|object} children
+   *   A vector of ordered children, or a key:value map of nibbles to
+   *   sub-tries. When specifying a vector, there must be exactly 16 elements,
+   *   with 'undefined' for empty branches.
+   *
+   * @return {Branch}
    * @private
    */
   constructor(prefix = '', children) {
@@ -351,7 +359,7 @@ export class BranchNode extends Tree {
       ? intoVector(children)
       : children;
 
-    // NOTE: We use 'undefined' to represent empty sub-trees mostly because
+    // NOTE: We use 'undefined' to represent empty sub-tries mostly because
     //
     // (1) It is convenient.
     // (2) It saves spaces/memory.
@@ -361,19 +369,19 @@ export class BranchNode extends Tree {
     // should be.
     children.forEach((node, ix) => {
       if (node !== undefined) {
-        assertInstanceOf(Tree, { [`children[${ix}]`]: node });
+        assertInstanceOf(Trie, { [`children[${ix}]`]: node });
         assert(
           !node.isEmpty(),
-          `BranchNode cannot contain empty trees; but children[${ix}] is empty.`
+          `Branch cannot contain empty tries; but children[${ix}] is empty.`
         );
       }
     })
 
-    // NOTE: There are special behaviours associated with trees that contains a
+    // NOTE: There are special behaviours associated with tries that contains a
     // single node and this is captured as {@link Leaf}.
     assert(
       children.filter(node => node !== undefined).length > 1,
-      'BranchNode must have at *at least 2* children. A BranchNode with a single child is a Leaf.',
+      'Branch must have at *at least 2* children. A Branch with a single child is a Leaf.',
     );
 
     assert(
@@ -383,47 +391,11 @@ export class BranchNode extends Tree {
 
     this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
-    this.setPrefix(prefix, BranchNode.merkleRoot(this.children));
+    this.setPrefix(prefix, merkleRoot(this.children));
   }
 
   /**
-   * Compute the Merkle root of a Sparse-Merkle-Tree formed by a node's children.
-   *
-   * @param {Array<Tree>} children A non-empty list of child nodes to merkleize.
-   * @param {number} [size=16] An expected size. Mostly exists to provide a check
-   *                           by default; can be overridden in context that matters.
-   * @return Buffer
-   */
-  static merkleRoot(children, size = 16) {
-    let nodes = children.map(x => x?.hash ?? x ?? NULL_HASH);
-
-    let n = nodes.length;
-
-    assert(
-      n === size,
-      `trying to compute an intermediate Merkle root of ${nodes.length} nodes instead of ${size}`);
-
-    if (n === 1) {
-      return nodes[0];
-    }
-
-    assert(
-      n >= 2 && n % 2 === 0,
-      `trying to compute intermediate Merkle root of an odd number of nodes.`,
-    );
-
-    do {
-      for (let i = 0; 2 * i < n; i += 1) {
-        nodes.push(digest(Buffer.concat(nodes.splice(0, 2))));
-      }
-      n = nodes.length;
-    } while (n > 1);
-
-    return nodes[0];
-  }
-
-  /**
-   * Construct a merkle proof for a given non-empty tree.
+   * Construct a merkle proof for a given non-empty trie.
    *
    * @param {Array<Buffer>} nodes A non-empty list of child nodes to merkleize.
    * @param {number} me The index of the node we are proving
@@ -438,10 +410,10 @@ export class BranchNode extends Tree {
     let pivot = 8; let n = 8;
     do {
       if (me < pivot) {
-        neighbors.push(BranchNode.merkleRoot(nodes.slice(pivot, pivot + n), n))
+        neighbors.push(merkleRoot(nodes.slice(pivot, pivot + n), n))
         pivot -= (n >> 1);
       } else {
-        neighbors.push(BranchNode.merkleRoot(nodes.slice(pivot - n, pivot), n));
+        neighbors.push(merkleRoot(nodes.slice(pivot - n, pivot), n));
         pivot += (n >> 1);
       }
       n = n >> 1;
@@ -457,7 +429,7 @@ export class BranchNode extends Tree {
    *
    * @param {string} prefix A sequence of nibbles.
    * @param {Buffer} hash A hash digest of the value.
-   * @return {Tree} A reference to the underlying tree with its prefix modified.
+   * @return {Trie} A reference to the underlying trie with its prefix modified.
    * @private
    */
   setPrefix(prefix, hash) {
@@ -474,13 +446,13 @@ export class BranchNode extends Tree {
 
 
   /**
-   * See {@link Tree.walk}
+   * See {@link Trie.walk}
    * @private
    */
   walk(path) {
     assert(
       path.startsWith(this.prefix),
-      `element at remaining path ${path} not in tree: non-matching prefix ${this.prefix}`,
+      `element at remaining path ${path} not in trie: non-matching prefix ${this.prefix}`,
     );
 
     const skip = this.prefix.length;
@@ -492,13 +464,13 @@ export class BranchNode extends Tree {
 
     assert(
       child !== undefined,
-      `element at remaining path ${path} not in tree: no child at branch ${branch}`,
+      `element at remaining path ${path} not in trie: no child at branch ${branch}`,
     );
 
     return child.walk(path.slice(1)).rewind(child, skip, this.children);
   }
 
-  /** A custom function for inspecting a BranchNode, with colors and nice formatting.
+  /** A custom function for inspecting a Branch, with colors and nice formatting.
    * @private
    */
   [inspect.custom](depth, options, inspect) {
@@ -557,8 +529,8 @@ export class BranchNode extends Tree {
 
 // ----------------------------------------------------------------------- Proof
 
-/** A self-contained proof of inclusion for a value in a {@link Tree}. A proof
- * holds onto a *specific* value and is only valid for a *specific* {@link Tree}.
+/** A self-contained proof of inclusion for a value in a {@link Trie}. A proof
+ * holds onto a *specific* value and is only valid for a *specific* {@link Trie}.
  */
 export class Proof {
   static #TYPE_LEAF = Symbol('leaf');
@@ -570,11 +542,11 @@ export class Proof {
    */
   value;
 
-  /** Proof steps, containing neighboring nodes at each level in the tree as well
+  /** Proof steps, containing neighboring nodes at each level in the trie as well
    * as the size of the prefix for this level. we need not to provide the actual
    * nibbles because they are given by the value's key already.
    *
-   * Step's neighbors contains root hashes of neighbors subtrees.
+   * Step's neighbors contains root hashes of neighbors sub-tries.
    *
    * @type {Array<{skip: number, neighbors: Array<Buffer|undefined>}>}
    */
@@ -597,9 +569,9 @@ export class Proof {
    * rewind one level until we reach the root. At each level, we record the
    * neighbors nodes as well as the length of the prefix.
    *
-   * @param {Tree} target Sub-tree on the path we are proving. Excluded from neighbors.
+   * @param {Trie} target Sub-trie on the path we are proving. Excluded from neighbors.
    * @param {number} skip The size of the prefix
-   * @param {Array<Tree>} children A list of sub-trees.
+   * @param {Array<Trie>} children A list of sub-tries.
    * @return {Proof} The proof itself, with an extra step pre-pended.
    * @private
    */
@@ -627,7 +599,7 @@ export class Proof {
             neighbor: {
               prefix: nibbles(neighbor.prefix),
               nibble: children.indexOf(neighbor),
-              value: BranchNode.merkleRoot(neighbor.children),
+              value: merkleRoot(neighbor.children),
             }
           }
       );
@@ -635,7 +607,7 @@ export class Proof {
       this.steps.unshift({
         type: Proof.#TYPE_BRANCH,
         skip,
-        neighbors: BranchNode.merkleProof(children, me),
+        neighbors: Branch.merkleProof(children, me),
       });
     }
 
@@ -649,17 +621,17 @@ export class Proof {
    * - One that computes the root without the element.
    *
    * The second mode is useful to prove insertion and removal of an element in
-   * a tree. Consider a tree T0 that doesn't contain an element e, and a tree T1
+   * a trie. Consider a trie T0 that doesn't contain an element e, and a trie T1
    * that is T0 with e inserted. Then, one can provide a proof for e in T1.
    *
    * Computing the proof without e will yield T0's hash, whereas computing it
    * with e will yield T1.
    *
-   * @param {bool} [withElement=true] When set, computes the resulting root hash
-   *                                  considering the underlying value is in the
-   *                                  tree.
-   * @return {Buffer} A resulting hash as a byte buffer, to be compared with a known
-   *                  root.
+   * @param {bool} [withElement=true]
+   *   When set, computes the resulting root hash considering the underlying
+   *   value is in the trie.
+   * @return {Buffer}
+   *   A resulting hash as a byte buffer, to be compared with a known root.
    */
   verify(withElement = true) {
     const path = intoKey(this.value);
@@ -690,8 +662,8 @@ export class Proof {
       // Merge nodes together into a new (sub-)root.
       function root(nodes) {
         const prefix = path.slice(cursor, nextCursor - 1);
-        const merkle = BranchNode.merkleRoot(intoVector(nodes));
-        return BranchNode.prototype.setPrefix.call({}, prefix, merkle).hash;
+        const merkle = merkleRoot(intoVector(nodes));
+        return Branch.prototype.setPrefix.call({}, prefix, merkle).hash;
       }
 
       switch (step.type) {
@@ -702,6 +674,8 @@ export class Proof {
 
           const [lvl1, lvl2, lvl3, lvl4] = step.neighbors;
 
+          // NOTE: There are more elegant ways to do that but, it works, is
+          // fairly easy to understand and fairly easy to maintain.
           const merkle = {
             0: h(h(h(h(me, lvl4), lvl3), lvl2), lvl1),
             1: h(h(h(h(lvl4, me), lvl3), lvl2), lvl1),
@@ -723,7 +697,7 @@ export class Proof {
 
           const prefix = path.slice(cursor, nextCursor - 1);
 
-          return BranchNode.prototype.setPrefix.call({}, prefix, merkle).hash;
+          return Branch.prototype.setPrefix.call({}, prefix, merkle).hash;
         }
 
         case Proof.#TYPE_FORK: {
@@ -856,6 +830,48 @@ export function digest(msg) {
       .update(msg)
       .digest()
   );
+}
+
+
+/**
+ * Compute the Merkle root of a Sparse-Merkle-Trie formed by a node's children.
+ *
+ * @param {Array<{ hash: Buffer }|Buffer|undefined>} children
+ *   A non-empty list of (possibly empty) child nodes (hashes) to merkleize.
+ *
+ * @param {number} [size=16]
+ *   An expected size. Mostly exists to provide a check by default; can be
+ *   overridden in context that matters.
+ *
+ * @return Buffer
+ * @private
+ */
+export function merkleRoot(children, size = 16) {
+  let nodes = children.map(x => x?.hash ?? x ?? NULL_HASH);
+
+  let n = nodes.length;
+
+  assert(
+    n === size,
+    `trying to compute an intermediate Merkle root of ${nodes.length} nodes instead of ${size}`);
+
+  if (n === 1) {
+    return nodes[0];
+  }
+
+  assert(
+    n >= 2 && n % 2 === 0,
+    `trying to compute intermediate Merkle root of an odd number of nodes.`,
+  );
+
+  do {
+    for (let i = 0; 2 * i < n; i += 1) {
+      nodes.push(digest(Buffer.concat(nodes.splice(0, 2))));
+    }
+    n = nodes.length;
+  } while (n > 1);
+
+  return nodes[0];
 }
 
 

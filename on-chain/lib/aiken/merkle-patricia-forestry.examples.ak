@@ -1,10 +1,10 @@
 use aiken/fuzz
 use aiken/list
-use aiken/merkle_patricia_tree.{
-  Branch, Fork, Leaf, MerklePatriciaTree, Neighbor, Proof, ProofStep,
-} as mpt
+use aiken/merkle_patricia_forestry.{
+  Branch, Fork, Leaf, MerklePatriciaForestry, Neighbor, Proof, ProofStep,
+} as mpf
 
-/// An example tree made from a list of fruits.
+/// An example trie made from a list of fruits.
 ///
 /// ╔═══════════════════════════════════════════════════════════════════╗
 /// ║ #8a66b5d3cde7b9fb5370b9fcfcd0acd12a045423ecff85b439738b6a0796d9b7 ║
@@ -51,153 +51,149 @@ use aiken/merkle_patricia_tree.{
 ///     │  └─ d8c90..[53 digits]..df1a #a54def540220 → pomegranate (113)
 ///     └─ 77af1..[54 digits]..ce06 #415dcee4a96c → watermelon (20)
 ///
-fn tree() -> MerklePatriciaTree {
-  mpt.from_root(
+fn trie() -> MerklePatriciaForestry {
+  mpf.from_root(
     #"8a66b5d3cde7b9fb5370b9fcfcd0acd12a045423ecff85b439738b6a0796d9b7",
   )
 }
 
-test example_insert_tmp() {
-  mpt.insert(tree_without_apple(), "apple (0)", proof_apple()) == tree()
-}
-
 test example_has() {
   and {
-    mpt.has(tree(), "apple (0)", proof_apple()),
-    mpt.has(tree(), "apricot (0)", proof_apricot()),
-    mpt.has(tree(), "banana (328)", proof_banana()),
-    mpt.has(tree(), "blackberry (0)", proof_blackberry()),
-    mpt.has(tree(), "blueberry (92383)", proof_blueberry()),
-    mpt.has(tree(), "cherry (0)", proof_cherry()),
-    mpt.has(tree(), "coconut (0)", proof_coconut()),
-    mpt.has(tree(), "cranberry (0)", proof_cranberry()),
-    mpt.has(tree(), "durian (0)", proof_durian()),
-    mpt.has(tree(), "fig (0)", proof_fig()),
-    mpt.has(tree(), "grape (110606)", proof_grape()),
-    mpt.has(tree(), "grapefruit (0)", proof_grapefruit()),
-    mpt.has(tree(), "guava (0)", proof_guava()),
-    mpt.has(tree(), "kiwi (0)", proof_kiwi()),
-    mpt.has(tree(), "kumquat (0)", proof_kumquat()),
-    mpt.has(tree(), "lemon (37694)", proof_lemon()),
-    mpt.has(tree(), "lime (0)", proof_lime()),
-    mpt.has(tree(), "mango (0)", proof_mango()),
-    mpt.has(tree(), "orange (36703)", proof_orange()),
-    mpt.has(tree(), "papaya (0)", proof_papaya()),
-    mpt.has(tree(), "passionfruit (0)", proof_passionfruit()),
-    mpt.has(tree(), "peach (0)", proof_peach()),
-    mpt.has(tree(), "pear (0)", proof_pear()),
-    mpt.has(tree(), "pineapple (0)", proof_pineapple()),
-    mpt.has(tree(), "plum (0)", proof_plum()),
-    mpt.has(tree(), "pomegranate (113)", proof_pomegranate()),
-    mpt.has(tree(), "raspberry (0)", proof_raspberry()),
-    mpt.has(tree(), "strawberry (0)", proof_strawberry()),
-    mpt.has(tree(), "watermelon (20)", proof_watermelon()),
-    mpt.has(tree(), "yuzu (0)", proof_yuzu()),
+    mpf.has(trie(), "apple (0)", proof_apple()),
+    mpf.has(trie(), "apricot (0)", proof_apricot()),
+    mpf.has(trie(), "banana (328)", proof_banana()),
+    mpf.has(trie(), "blackberry (0)", proof_blackberry()),
+    mpf.has(trie(), "blueberry (92383)", proof_blueberry()),
+    mpf.has(trie(), "cherry (0)", proof_cherry()),
+    mpf.has(trie(), "coconut (0)", proof_coconut()),
+    mpf.has(trie(), "cranberry (0)", proof_cranberry()),
+    mpf.has(trie(), "durian (0)", proof_durian()),
+    mpf.has(trie(), "fig (0)", proof_fig()),
+    mpf.has(trie(), "grape (110606)", proof_grape()),
+    mpf.has(trie(), "grapefruit (0)", proof_grapefruit()),
+    mpf.has(trie(), "guava (0)", proof_guava()),
+    mpf.has(trie(), "kiwi (0)", proof_kiwi()),
+    mpf.has(trie(), "kumquat (0)", proof_kumquat()),
+    mpf.has(trie(), "lemon (37694)", proof_lemon()),
+    mpf.has(trie(), "lime (0)", proof_lime()),
+    mpf.has(trie(), "mango (0)", proof_mango()),
+    mpf.has(trie(), "orange (36703)", proof_orange()),
+    mpf.has(trie(), "papaya (0)", proof_papaya()),
+    mpf.has(trie(), "passionfruit (0)", proof_passionfruit()),
+    mpf.has(trie(), "peach (0)", proof_peach()),
+    mpf.has(trie(), "pear (0)", proof_pear()),
+    mpf.has(trie(), "pineapple (0)", proof_pineapple()),
+    mpf.has(trie(), "plum (0)", proof_plum()),
+    mpf.has(trie(), "pomegranate (113)", proof_pomegranate()),
+    mpf.has(trie(), "raspberry (0)", proof_raspberry()),
+    mpf.has(trie(), "strawberry (0)", proof_strawberry()),
+    mpf.has(trie(), "watermelon (20)", proof_watermelon()),
+    mpf.has(trie(), "yuzu (0)", proof_yuzu()),
   }
 }
 
 test example_insert() {
   and {
-    mpt.insert(tree_without_apple(), "apple (0)", proof_apple()) == tree(),
-    mpt.insert(tree_without_apricot(), "apricot (0)", proof_apricot()) == tree(),
-    mpt.insert(tree_without_banana(), "banana (328)", proof_banana()) == tree(),
-    mpt.insert(tree_without_blackberry(), "blackberry (0)", proof_blackberry()) == tree(),
-    mpt.insert(tree_without_blueberry(), "blueberry (92383)", proof_blueberry()) == tree(),
-    mpt.insert(tree_without_cherry(), "cherry (0)", proof_cherry()) == tree(),
-    mpt.insert(tree_without_coconut(), "coconut (0)", proof_coconut()) == tree(),
-    mpt.insert(tree_without_cranberry(), "cranberry (0)", proof_cranberry()) == tree(),
-    mpt.insert(tree_without_durian(), "durian (0)", proof_durian()) == tree(),
-    mpt.insert(tree_without_fig(), "fig (0)", proof_fig()) == tree(),
-    mpt.insert(tree_without_grape(), "grape (110606)", proof_grape()) == tree(),
-    mpt.insert(tree_without_grapefruit(), "grapefruit (0)", proof_grapefruit()) == tree(),
-    mpt.insert(tree_without_guava(), "guava (0)", proof_guava()) == tree(),
-    mpt.insert(tree_without_kiwi(), "kiwi (0)", proof_kiwi()) == tree(),
-    mpt.insert(tree_without_kumquat(), "kumquat (0)", proof_kumquat()) == tree(),
-    mpt.insert(tree_without_lemon(), "lemon (37694)", proof_lemon()) == tree(),
-    mpt.insert(tree_without_lime(), "lime (0)", proof_lime()) == tree(),
-    mpt.insert(tree_without_mango(), "mango (0)", proof_mango()) == tree(),
-    mpt.insert(tree_without_orange(), "orange (36703)", proof_orange()) == tree(),
-    mpt.insert(tree_without_papaya(), "papaya (0)", proof_papaya()) == tree(),
-    mpt.insert(
-      tree_without_passionfruit(),
+    mpf.insert(trie_without_apple(), "apple (0)", proof_apple()) == trie(),
+    mpf.insert(trie_without_apricot(), "apricot (0)", proof_apricot()) == trie(),
+    mpf.insert(trie_without_banana(), "banana (328)", proof_banana()) == trie(),
+    mpf.insert(trie_without_blackberry(), "blackberry (0)", proof_blackberry()) == trie(),
+    mpf.insert(trie_without_blueberry(), "blueberry (92383)", proof_blueberry()) == trie(),
+    mpf.insert(trie_without_cherry(), "cherry (0)", proof_cherry()) == trie(),
+    mpf.insert(trie_without_coconut(), "coconut (0)", proof_coconut()) == trie(),
+    mpf.insert(trie_without_cranberry(), "cranberry (0)", proof_cranberry()) == trie(),
+    mpf.insert(trie_without_durian(), "durian (0)", proof_durian()) == trie(),
+    mpf.insert(trie_without_fig(), "fig (0)", proof_fig()) == trie(),
+    mpf.insert(trie_without_grape(), "grape (110606)", proof_grape()) == trie(),
+    mpf.insert(trie_without_grapefruit(), "grapefruit (0)", proof_grapefruit()) == trie(),
+    mpf.insert(trie_without_guava(), "guava (0)", proof_guava()) == trie(),
+    mpf.insert(trie_without_kiwi(), "kiwi (0)", proof_kiwi()) == trie(),
+    mpf.insert(trie_without_kumquat(), "kumquat (0)", proof_kumquat()) == trie(),
+    mpf.insert(trie_without_lemon(), "lemon (37694)", proof_lemon()) == trie(),
+    mpf.insert(trie_without_lime(), "lime (0)", proof_lime()) == trie(),
+    mpf.insert(trie_without_mango(), "mango (0)", proof_mango()) == trie(),
+    mpf.insert(trie_without_orange(), "orange (36703)", proof_orange()) == trie(),
+    mpf.insert(trie_without_papaya(), "papaya (0)", proof_papaya()) == trie(),
+    mpf.insert(
+      trie_without_passionfruit(),
       "passionfruit (0)",
       proof_passionfruit(),
-    ) == tree(),
-    mpt.insert(tree_without_peach(), "peach (0)", proof_peach()) == tree(),
-    mpt.insert(tree_without_pear(), "pear (0)", proof_pear()) == tree(),
-    mpt.insert(tree_without_pineapple(), "pineapple (0)", proof_pineapple()) == tree(),
-    mpt.insert(tree_without_plum(), "plum (0)", proof_plum()) == tree(),
-    mpt.insert(
-      tree_without_pomegranate(),
+    ) == trie(),
+    mpf.insert(trie_without_peach(), "peach (0)", proof_peach()) == trie(),
+    mpf.insert(trie_without_pear(), "pear (0)", proof_pear()) == trie(),
+    mpf.insert(trie_without_pineapple(), "pineapple (0)", proof_pineapple()) == trie(),
+    mpf.insert(trie_without_plum(), "plum (0)", proof_plum()) == trie(),
+    mpf.insert(
+      trie_without_pomegranate(),
       "pomegranate (113)",
       proof_pomegranate(),
-    ) == tree(),
-    mpt.insert(tree_without_raspberry(), "raspberry (0)", proof_raspberry()) == tree(),
-    mpt.insert(tree_without_strawberry(), "strawberry (0)", proof_strawberry()) == tree(),
-    mpt.insert(tree_without_watermelon(), "watermelon (20)", proof_watermelon()) == tree(),
-    mpt.insert(tree_without_yuzu(), "yuzu (0)", proof_yuzu()) == tree(),
+    ) == trie(),
+    mpf.insert(trie_without_raspberry(), "raspberry (0)", proof_raspberry()) == trie(),
+    mpf.insert(trie_without_strawberry(), "strawberry (0)", proof_strawberry()) == trie(),
+    mpf.insert(trie_without_watermelon(), "watermelon (20)", proof_watermelon()) == trie(),
+    mpf.insert(trie_without_yuzu(), "yuzu (0)", proof_yuzu()) == trie(),
   }
 }
 
 test example_delete() {
   and {
-    mpt.delete(tree(), "apple (0)", proof_apple()) == tree_without_apple(),
-    mpt.delete(tree(), "apricot (0)", proof_apricot()) == tree_without_apricot(),
-    mpt.delete(tree(), "banana (328)", proof_banana()) == tree_without_banana(),
-    mpt.delete(tree(), "blackberry (0)", proof_blackberry()) == tree_without_blackberry(),
-    mpt.delete(tree(), "blueberry (92383)", proof_blueberry()) == tree_without_blueberry(),
-    mpt.delete(tree(), "cherry (0)", proof_cherry()) == tree_without_cherry(),
-    mpt.delete(tree(), "coconut (0)", proof_coconut()) == tree_without_coconut(),
-    mpt.delete(tree(), "cranberry (0)", proof_cranberry()) == tree_without_cranberry(),
-    mpt.delete(tree(), "durian (0)", proof_durian()) == tree_without_durian(),
-    mpt.delete(tree(), "fig (0)", proof_fig()) == tree_without_fig(),
-    mpt.delete(tree(), "grape (110606)", proof_grape()) == tree_without_grape(),
-    mpt.delete(tree(), "grapefruit (0)", proof_grapefruit()) == tree_without_grapefruit(),
-    mpt.delete(tree(), "guava (0)", proof_guava()) == tree_without_guava(),
-    mpt.delete(tree(), "kiwi (0)", proof_kiwi()) == tree_without_kiwi(),
-    mpt.delete(tree(), "kumquat (0)", proof_kumquat()) == tree_without_kumquat(),
-    mpt.delete(tree(), "lemon (37694)", proof_lemon()) == tree_without_lemon(),
-    mpt.delete(tree(), "lime (0)", proof_lime()) == tree_without_lime(),
-    mpt.delete(tree(), "mango (0)", proof_mango()) == tree_without_mango(),
-    mpt.delete(tree(), "orange (36703)", proof_orange()) == tree_without_orange(),
-    mpt.delete(tree(), "papaya (0)", proof_papaya()) == tree_without_papaya(),
-    mpt.delete(tree(), "passionfruit (0)", proof_passionfruit()) == tree_without_passionfruit(),
-    mpt.delete(tree(), "peach (0)", proof_peach()) == tree_without_peach(),
-    mpt.delete(tree(), "pear (0)", proof_pear()) == tree_without_pear(),
-    mpt.delete(tree(), "pineapple (0)", proof_pineapple()) == tree_without_pineapple(),
-    mpt.delete(tree(), "plum (0)", proof_plum()) == tree_without_plum(),
-    mpt.delete(tree(), "pomegranate (113)", proof_pomegranate()) == tree_without_pomegranate(),
-    mpt.delete(tree(), "raspberry (0)", proof_raspberry()) == tree_without_raspberry(),
-    mpt.delete(tree(), "strawberry (0)", proof_strawberry()) == tree_without_strawberry(),
-    mpt.delete(tree(), "watermelon (20)", proof_watermelon()) == tree_without_watermelon(),
-    mpt.delete(tree(), "yuzu (0)", proof_yuzu()) == tree_without_yuzu(),
+    mpf.delete(trie(), "apple (0)", proof_apple()) == trie_without_apple(),
+    mpf.delete(trie(), "apricot (0)", proof_apricot()) == trie_without_apricot(),
+    mpf.delete(trie(), "banana (328)", proof_banana()) == trie_without_banana(),
+    mpf.delete(trie(), "blackberry (0)", proof_blackberry()) == trie_without_blackberry(),
+    mpf.delete(trie(), "blueberry (92383)", proof_blueberry()) == trie_without_blueberry(),
+    mpf.delete(trie(), "cherry (0)", proof_cherry()) == trie_without_cherry(),
+    mpf.delete(trie(), "coconut (0)", proof_coconut()) == trie_without_coconut(),
+    mpf.delete(trie(), "cranberry (0)", proof_cranberry()) == trie_without_cranberry(),
+    mpf.delete(trie(), "durian (0)", proof_durian()) == trie_without_durian(),
+    mpf.delete(trie(), "fig (0)", proof_fig()) == trie_without_fig(),
+    mpf.delete(trie(), "grape (110606)", proof_grape()) == trie_without_grape(),
+    mpf.delete(trie(), "grapefruit (0)", proof_grapefruit()) == trie_without_grapefruit(),
+    mpf.delete(trie(), "guava (0)", proof_guava()) == trie_without_guava(),
+    mpf.delete(trie(), "kiwi (0)", proof_kiwi()) == trie_without_kiwi(),
+    mpf.delete(trie(), "kumquat (0)", proof_kumquat()) == trie_without_kumquat(),
+    mpf.delete(trie(), "lemon (37694)", proof_lemon()) == trie_without_lemon(),
+    mpf.delete(trie(), "lime (0)", proof_lime()) == trie_without_lime(),
+    mpf.delete(trie(), "mango (0)", proof_mango()) == trie_without_mango(),
+    mpf.delete(trie(), "orange (36703)", proof_orange()) == trie_without_orange(),
+    mpf.delete(trie(), "papaya (0)", proof_papaya()) == trie_without_papaya(),
+    mpf.delete(trie(), "passionfruit (0)", proof_passionfruit()) == trie_without_passionfruit(),
+    mpf.delete(trie(), "peach (0)", proof_peach()) == trie_without_peach(),
+    mpf.delete(trie(), "pear (0)", proof_pear()) == trie_without_pear(),
+    mpf.delete(trie(), "pineapple (0)", proof_pineapple()) == trie_without_pineapple(),
+    mpf.delete(trie(), "plum (0)", proof_plum()) == trie_without_plum(),
+    mpf.delete(trie(), "pomegranate (113)", proof_pomegranate()) == trie_without_pomegranate(),
+    mpf.delete(trie(), "raspberry (0)", proof_raspberry()) == trie_without_raspberry(),
+    mpf.delete(trie(), "strawberry (0)", proof_strawberry()) == trie_without_strawberry(),
+    mpf.delete(trie(), "watermelon (20)", proof_watermelon()) == trie_without_watermelon(),
+    mpf.delete(trie(), "yuzu (0)", proof_yuzu()) == trie_without_yuzu(),
   }
 }
 
 // -------------------- Some negative cases
 
 test example_already_inserted() fail {
-  let root = mpt.insert(tree(), "kiwi (0)", proof_kiwi())
+  let root = mpf.insert(trie(), "kiwi (0)", proof_kiwi())
   root == root
 }
 
 test example_insert_nearby_with_wrong_proof() fail {
-  let root = mpt.insert(tree_without_kiwi(), "grape (110606)", proof_kiwi())
+  let root = mpf.insert(trie_without_kiwi(), "grape (110606)", proof_kiwi())
   root == root
 }
 
 test example_insert_higher_with_wrong_proof() fail {
-  let root = mpt.insert(tree_without_lemon(), "kiwi (0)", proof_lemon())
+  let root = mpf.insert(trie_without_lemon(), "kiwi (0)", proof_lemon())
   root == root
 }
 
 test example_delete_nearby_with_wrong_proof() fail {
-  let root = mpt.delete(tree(), "blackberry (0)", proof_grapefruit())
+  let root = mpf.delete(trie(), "blackberry (0)", proof_grapefruit())
   root == root
 }
 
 test example_delete_higher_with_wrong_proof() fail {
-  let root = mpt.delete(tree(), "watermelon (20)", proof_blueberry())
+  let root = mpf.delete(trie(), "watermelon (20)", proof_blueberry())
   root == root
 }
 
@@ -261,7 +257,7 @@ test example_mutate_proof(
   mutation via fuzz_proof_mutation(proof_pomegranate()),
 ) fail {
   let proof = proof_pomegranate() |> mutate(mutation)
-  mpt.has(tree(), "pomegranate (113)", proof)
+  mpf.has(trie(), "pomegranate (113)", proof)
 }
 
 // -------------------- Fruits
@@ -277,8 +273,8 @@ fn proof_apple() {
   ]
 }
 
-fn tree_without_apple() {
-  mpt.from_root(
+fn trie_without_apple() {
+  mpf.from_root(
     #"9a4d6e6d86e25c936504f75cfdfccecb244f51dbc8779ca8d1fd979ec35eb21f",
   )
 }
@@ -298,8 +294,8 @@ fn proof_apricot() {
   ]
 }
 
-fn tree_without_apricot() {
-  mpt.from_root(
+fn trie_without_apricot() {
+  mpf.from_root(
     #"a7218b2c0aed9e6c7c88df6549879b68d9be103d9d4db933f7a5b6a4f7c36619",
   )
 }
@@ -319,8 +315,8 @@ fn proof_banana() {
   ]
 }
 
-fn tree_without_banana() {
-  mpt.from_root(
+fn trie_without_banana() {
+  mpf.from_root(
     #"bff5c6e18ff9f2ef6925fe9d5911df21e7b65f34d8a175d928e89e3c72ba74cf",
   )
 }
@@ -340,8 +336,8 @@ fn proof_blackberry() {
   ]
 }
 
-fn tree_without_blackberry() {
-  mpt.from_root(
+fn trie_without_blackberry() {
+  mpf.from_root(
     #"12823ae8014eca373e79344b089e9354de00f1de395e19cd98b54299fea80389",
   )
 }
@@ -369,8 +365,8 @@ fn proof_blueberry() {
   ]
 }
 
-fn tree_without_blueberry() {
-  mpt.from_root(
+fn trie_without_blueberry() {
+  mpf.from_root(
     #"ec5bee82c48fad1fc5e16134d40574e8a117da19b171f3f9c817f02daa7574f6",
   )
 }
@@ -390,8 +386,8 @@ fn proof_cherry() {
   ]
 }
 
-fn tree_without_cherry() {
-  mpt.from_root(
+fn trie_without_cherry() {
+  mpf.from_root(
     #"2a3889600d992dae52f609ab4273fdf4547f1cd6d389cd2d3acac582130268d7",
   )
 }
@@ -411,8 +407,8 @@ fn proof_coconut() {
   ]
 }
 
-fn tree_without_coconut() {
-  mpt.from_root(
+fn trie_without_coconut() {
+  mpf.from_root(
     #"4208a39a14ed18807fbe361a99d147e21c7922d11fb44ae0a54c4edbfce7e705",
   )
 }
@@ -428,8 +424,8 @@ fn proof_cranberry() {
   ]
 }
 
-fn tree_without_cranberry() {
-  mpt.from_root(
+fn trie_without_cranberry() {
+  mpf.from_root(
     #"3d353c058003f1d35f79b726dce2b231e71bfb554f9e47ffce2a4b0b1459db57",
   )
 }
@@ -449,8 +445,8 @@ fn proof_durian() {
   ]
 }
 
-fn tree_without_durian() {
-  mpt.from_root(
+fn trie_without_durian() {
+  mpf.from_root(
     #"7c2794eaabb8b91d10c4379c460c48554c6d5dce7a6e945d6aa37463aa0d2020",
   )
 }
@@ -470,8 +466,8 @@ fn proof_fig() {
   ]
 }
 
-fn tree_without_fig() {
-  mpt.from_root(
+fn trie_without_fig() {
+  mpf.from_root(
     #"59de1aa5b12104d1c402721c617a168a57c3a6c2490c505c500ae6d112e6eb0d",
   )
 }
@@ -495,8 +491,8 @@ fn proof_grape() {
   ]
 }
 
-fn tree_without_grape() {
-  mpt.from_root(
+fn trie_without_grape() {
+  mpf.from_root(
     #"d4d08b7814a7fe9cc30c3c358b896dac3d2bd1ca9cdff6a8ea7db9a905863fab",
   )
 }
@@ -516,8 +512,8 @@ fn proof_grapefruit() {
   ]
 }
 
-fn tree_without_grapefruit() {
-  mpt.from_root(
+fn trie_without_grapefruit() {
+  mpf.from_root(
     #"7de91f7f48795439990a8991c80e6abcebbe09e52ae3a91ca1df1949931bcd48",
   )
 }
@@ -537,8 +533,8 @@ fn proof_guava() {
   ]
 }
 
-fn tree_without_guava() {
-  mpt.from_root(
+fn trie_without_guava() {
+  mpf.from_root(
     #"2720797c205378108dc035d58847f4e53ff6d41109f51e8756420c00b3c3a674",
   )
 }
@@ -562,8 +558,8 @@ fn proof_kiwi() {
   ]
 }
 
-fn tree_without_kiwi() {
-  mpt.from_root(
+fn trie_without_kiwi() {
+  mpf.from_root(
     #"000183ca63d11d325ac92f780fe301e64109ff7b16870d19e5f767698ddbdb0e",
   )
 }
@@ -583,8 +579,8 @@ fn proof_kumquat() {
   ]
 }
 
-fn tree_without_kumquat() {
-  mpt.from_root(
+fn trie_without_kumquat() {
+  mpf.from_root(
     #"d6281a90334b6c9cdf00c82cd876629decb40db2314041011436571284fa6e61",
   )
 }
@@ -608,8 +604,8 @@ fn proof_lemon() {
   ]
 }
 
-fn tree_without_lemon() {
-  mpt.from_root(
+fn trie_without_lemon() {
+  mpf.from_root(
     #"14713497ff9fa7d43e77ec49651a40976c0e073ecec74b9fc2eac9568f2831d8",
   )
 }
@@ -629,8 +625,8 @@ fn proof_lime() {
   ]
 }
 
-fn tree_without_lime() {
-  mpt.from_root(
+fn trie_without_lime() {
+  mpf.from_root(
     #"cced04e34827c8f5aa3394ba7769952a7f798bc7394cd84f921c8ddb65486405",
   )
 }
@@ -646,8 +642,8 @@ fn proof_mango() {
   ]
 }
 
-fn tree_without_mango() {
-  mpt.from_root(
+fn trie_without_mango() {
+  mpf.from_root(
     #"677a5fcf4b246af1d46a9d8ae7bcc891731b7bb01ac1068ed808b1fb118cc898",
   )
 }
@@ -667,8 +663,8 @@ fn proof_orange() {
   ]
 }
 
-fn tree_without_orange() {
-  mpt.from_root(
+fn trie_without_orange() {
+  mpf.from_root(
     #"d76b6f56ccba499f94a7ab4a47553b426b4b64968a515d9d9a018dd58934fab1",
   )
 }
@@ -688,8 +684,8 @@ fn proof_papaya() {
   ]
 }
 
-fn tree_without_papaya() {
-  mpt.from_root(
+fn trie_without_papaya() {
+  mpf.from_root(
     #"12ae97c8c500ebb3b0fb9fe209177319757747593b76f67d9e81367e21dec31b",
   )
 }
@@ -717,8 +713,8 @@ fn proof_passionfruit() {
   ]
 }
 
-fn tree_without_passionfruit() {
-  mpt.from_root(
+fn trie_without_passionfruit() {
+  mpf.from_root(
     #"fbd0f42ec1d31de6eb1efeb5afc446c5eed785228ac7c185693b9451ad039a30",
   )
 }
@@ -734,8 +730,8 @@ fn proof_peach() {
   ]
 }
 
-fn tree_without_peach() {
-  mpt.from_root(
+fn trie_without_peach() {
+  mpf.from_root(
     #"ac23b90822fe7e7fe1ce8989faa4155bfd89df2581911f7628efe4fa54deecc2",
   )
 }
@@ -755,8 +751,8 @@ fn proof_pear() {
   ]
 }
 
-fn tree_without_pear() {
-  mpt.from_root(
+fn trie_without_pear() {
+  mpf.from_root(
     #"06f2434a0f5b56bea3a94f9daccfa0a5e205ff4cc6afb3818cb1492f698cbfec",
   )
 }
@@ -776,8 +772,8 @@ fn proof_pineapple() {
   ]
 }
 
-fn tree_without_pineapple() {
-  mpt.from_root(
+fn trie_without_pineapple() {
+  mpf.from_root(
     #"8af397621fbcbbed47af8b251e164663f5e0b5076b34b2d3e7ca514d5d5e107a",
   )
 }
@@ -797,8 +793,8 @@ fn proof_plum() {
   ]
 }
 
-fn tree_without_plum() {
-  mpt.from_root(
+fn trie_without_plum() {
+  mpf.from_root(
     #"2fa2f6c70db080863cc047d3da74165b91796030d57b052fbe528b674d0315cf",
   )
 }
@@ -826,8 +822,8 @@ fn proof_pomegranate() {
   ]
 }
 
-fn tree_without_pomegranate() {
-  mpt.from_root(
+fn trie_without_pomegranate() {
+  mpf.from_root(
     #"ebe783382866d39bee47722f68b16a2e1a1e66b95e9ebf17112f1566f2aaf378",
   )
 }
@@ -847,8 +843,8 @@ fn proof_raspberry() {
   ]
 }
 
-fn tree_without_raspberry() {
-  mpt.from_root(
+fn trie_without_raspberry() {
+  mpf.from_root(
     #"0f619435622f05dbef28bf1d213b84a1fa72d3bcab275bfe9adf6e05f6535084",
   )
 }
@@ -864,8 +860,8 @@ fn proof_strawberry() {
   ]
 }
 
-fn tree_without_strawberry() {
-  mpt.from_root(
+fn trie_without_strawberry() {
+  mpf.from_root(
     #"a620b703557977a84bdda57bfd8145be0eaa5382611359e5f725dd5c04ac6181",
   )
 }
@@ -889,8 +885,8 @@ fn proof_watermelon() {
   ]
 }
 
-fn tree_without_watermelon() {
-  mpt.from_root(
+fn trie_without_watermelon() {
+  mpf.from_root(
     #"ee1de2930c35731c833e1d472f34ceaa41cb8874f6f336769742808f7152c2d2",
   )
 }
@@ -910,8 +906,8 @@ fn proof_yuzu() {
   ]
 }
 
-fn tree_without_yuzu() {
-  mpt.from_root(
+fn trie_without_yuzu() {
+  mpf.from_root(
     #"c85314075bae704df95bbd5ab74259540463b1552c94a1a6ffce0da22234c522",
   )
 }

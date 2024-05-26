@@ -1,5 +1,5 @@
 import test from 'ava';
-import { Leaf, BranchNode, Proof, Tree, digest } from '../lib/index.js';
+import { Leaf, Branch, Proof, Trie, digest, merkleRoot } from '../lib/index.js';
 import * as helpers from '../lib/helpers.js';
 import { inspect } from 'node:util';
 
@@ -36,73 +36,73 @@ const FRUITS_LIST = [
   'yuzu (0)',
 ];
 
-// ------------------------------------------------------------------------ Tree
+// ------------------------------------------------------------------------ Trie
 
-test('Tree: a new Tree is always empty', t => {
-  const tree = new Tree();
-  t.true(tree.isEmpty());
+test('Trie: a new Trie is always empty', t => {
+  const trie = new Trie();
+  t.true(trie.isEmpty());
 });
 
-test('Tree: inspect an empty tree', t => {
-  const tree = new Tree();
-  t.is(inspect(tree), 'ø');
+test('Trie: inspect an empty trie', t => {
+  const trie = new Trie();
+  t.is(inspect(trie), 'ø');
 });
 
-test('Tree: can construct from an empty list', t => {
-  t.deepEqual(Tree.fromList([]), new Tree());
+test('Trie: can construct from an empty list', t => {
+  t.deepEqual(Trie.fromList([]), new Trie());
 });
 
-test('Tree: can be constructed from a single value', t => {
+test('Trie: can be constructed from a single value', t => {
   const values = [ 'foo' ]
-  const tree = Tree.fromList(values);
+  const trie = Trie.fromList(values);
 
-  t.true(tree instanceof Leaf);
-  t.is(tree.prefix.length, 64);
-  t.is(tree.value.toString(), values[0]);
+  t.true(trie instanceof Leaf);
+  t.is(trie.prefix.length, 64);
+  t.is(trie.value.toString(), values[0]);
 });
 
-test('Tree: can be constructed from two values', t => {
+test('Trie: can be constructed from two values', t => {
   const values = [ 'foo', 'bar' ];
 
-  const tree = Tree.fromList(values);
+  const trie = Trie.fromList(values);
 
-  t.is(tree.size, 2);
-  t.false(tree instanceof Leaf);
+  t.is(trie.size, 2);
+  t.false(trie instanceof Leaf);
 
-  const foo = tree.children[11];
+  const foo = trie.children[11];
   t.true(foo instanceof Leaf);
   t.is(foo.prefix.length, 63);
   t.is(foo.value.toString(), values[0]);
 
-  const bar = tree.children[8];
+  const bar = trie.children[8];
   t.true(bar instanceof Leaf);
   t.is(bar.prefix.length, 63);
   t.is(bar.value.toString(), values[1]);
 });
 
-test('Tree: can create proof for leaf-tree for existing element', t => {
-  const tree = Tree.fromList(['foo']);
-  const proof = tree.prove('foo');
+test('Trie: can create proof for leaf-trie for existing element', t => {
+  const trie = Trie.fromList(['foo']);
+  const proof = trie.prove('foo');
 
   t.deepEqual(proof.steps, []);
 
   t.is(
     proof.verify().toString('hex'),
-    tree.hash.toString('hex'),
+    trie.hash.toString('hex'),
   );
 });
 
-test('Tree: cannot create proof for leaf-tree for non-existing elements', t => {
-  const tree = Tree.fromList(['foo']);
-  t.throws(() => tree.prove('bar'));
+test('Trie: cannot create proof for leaf-trie for non-existing elements', t => {
+  const trie = Trie.fromList(['foo']);
+  t.throws(() => trie.prove('bar'));
 });
 
-test('Tree: can create proof for simple trees', t => {
+test('Trie: can create proof for simple tries', t => {
   const values = [ 'foo', 'bar' ].map(Buffer.from);
 
-  const tree = Tree.fromList(values);
-  t.is(tree.size, 2);
-  t.is(inspect(tree), unindent`
+  const trie = Trie.fromList(values);
+  t.is(trie.size, 2);
+  t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
     ║ #b654ab8233d11434a115369eafaee571d10c01c615e9fd41c37c0bbc62e0b1a4 ║
     ╚═══════════════════════════════════════════════════════════════════╝
@@ -111,25 +111,25 @@ test('Tree: can create proof for simple trees', t => {
   `);
 
   const proofs = {
-    foo: tree.prove('foo'),
-    bar: tree.prove('bar'),
+    foo: trie.prove('foo'),
+    bar: trie.prove('bar'),
   };
 
-  t.true(proofs.foo.verify().equals(tree.hash));
+  t.true(proofs.foo.verify().equals(trie.hash));
   t.is(proofs.foo.steps.length, 1);
 
-  t.true(proofs.bar.verify().equals(tree.hash));
+  t.true(proofs.bar.verify().equals(trie.hash));
   t.is(proofs.bar.steps.length, 1);
 
-  t.throws(() => tree.prove('fo'));
-  t.throws(() => tree.prove('ba'));
-  t.throws(() => tree.prove('foobar'));
+  t.throws(() => trie.prove('fo'));
+  t.throws(() => trie.prove('ba'));
+  t.throws(() => trie.prove('foobar'));
 });
 
-test('Tree: checking for membership & insertion on complex tree', t => {
-  const tree = Tree.fromList(FRUITS_LIST);
+test('Trie: checking for membership & insertion on complex trie', t => {
+  const trie = Trie.fromList(FRUITS_LIST);
 
-  t.is(inspect(tree), unindent`
+  t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
     ║ #8a66b5d3cde7b9fb5370b9fcfcd0acd12a045423ecff85b439738b6a0796d9b7 ║
     ╚═══════════════════════════════════════════════════════════════════╝
@@ -177,15 +177,15 @@ test('Tree: checking for membership & insertion on complex tree', t => {
   `);
 
   FRUITS_LIST.forEach(fruit => {
-    const proof = tree.prove(fruit);
+    const proof = trie.prove(fruit);
 
     // Prove membership
-    t.true(proof.verify(true).equals(tree.hash), fruit);
+    t.true(proof.verify(true).equals(trie.hash), fruit);
 
-    const treeWithout = Tree.fromList(FRUITS_LIST.filter(x => x !== fruit));
+    const trieWithout = Trie.fromList(FRUITS_LIST.filter(x => x !== fruit));
 
     // Prove insertion
-    t.true(proof.verify(false).equals(treeWithout.hash), fruit);
+    t.true(proof.verify(false).equals(trieWithout.hash), fruit);
 
     // For (re-)generating Aiken code for proofs.
     //
@@ -193,35 +193,10 @@ test('Tree: checking for membership & insertion on complex tree', t => {
     //
     // console.log(`// ---------- ${fruit_name}\n`);
     // console.log(`fn proof_${fruit_name}() {\n${proof.toAiken()}\n}\n`);
-    // console.log(`fn tree_without_${fruit_name}() {\n  mpt.from_root(#"${treeWithout.hash.toString('hex')}")\n}\n\n`);
+    // console.log(`fn trie_without_${fruit_name}() {\n  mpt.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
   });
 });
 
-// ------------------------------------------------------------ Tree / auxiliary
-
-const NULL_HASH = Buffer.alloc(32);
-
-test('Tree.merkleRoot', t => {
-  t.is(
-    BranchNode.merkleRoot([NULL_HASH], 1).toString('hex'),
-    "0000000000000000000000000000000000000000000000000000000000000000"
-  );
-
-  t.is(
-    BranchNode.merkleRoot([NULL_HASH, NULL_HASH], 2).toString('hex'),
-    "0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761",
-  );
-
-  t.is(
-    BranchNode.merkleRoot((new Array(4)).fill(NULL_HASH), 4).toString('hex'),
-    "85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1",
-  );
-
-  t.is(
-    BranchNode.merkleRoot((new Array(8)).fill(NULL_HASH), 8).toString('hex'),
-    "b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a",
-  );
-});
 
 // --------------------------------------------------------------------- Helpers
 
@@ -230,16 +205,16 @@ test('commonPrefix: empty words', t => {
 });
 
 test('commonPrefix: empty word', t => {
-  t.throws(() => helpers.commonPrefix(['merkle-patricia-tree', '']));
+  t.throws(() => helpers.commonPrefix(['merkle-patricia-trie', '']));
 });
 
 test('commonPrefix: two identical strings', t => {
   const prefix = helpers.commonPrefix([
-    'merkle-patricia-tree',
-    'merkle-patricia-tree',
+    'merkle-patricia-trie',
+    'merkle-patricia-trie',
   ]);
 
-  t.is(prefix, 'merkle-patricia-tree');
+  t.is(prefix, 'merkle-patricia-trie');
 });
 
 test('commonPrefix: first word is prefix', t => {
@@ -281,6 +256,31 @@ test('commonPrefix: no common prefix', t => {
   ]);
 
   t.is(prefix, '');
+});
+
+
+const NULL_HASH = Buffer.alloc(32);
+
+test('merkleRoot: null hashes', t => {
+  t.is(
+    merkleRoot([NULL_HASH], 1).toString('hex'),
+    "0000000000000000000000000000000000000000000000000000000000000000"
+  );
+
+  t.is(
+    merkleRoot([NULL_HASH, NULL_HASH], 2).toString('hex'),
+    "0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761",
+  );
+
+  t.is(
+    merkleRoot((new Array(4)).fill(NULL_HASH), 4).toString('hex'),
+    "85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1",
+  );
+
+  t.is(
+    merkleRoot((new Array(8)).fill(NULL_HASH), 8).toString('hex'),
+    "b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a",
+  );
 });
 
 
