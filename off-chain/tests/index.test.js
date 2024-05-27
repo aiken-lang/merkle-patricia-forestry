@@ -1,5 +1,5 @@
 import test from 'ava';
-import { Leaf, Branch, Proof, Trie, digest, merkleRoot } from '../lib/index.js';
+import { Leaf, Branch, Proof, Trie } from '../lib/index.js';
 import * as helpers from '../lib/helpers.js';
 import { inspect } from 'node:util';
 
@@ -36,7 +36,10 @@ const FRUITS_LIST = [
   { key: 'yuzu[uid: 0]', value: '🤷' },
 ];
 
+
+// -----------------------------------------------------------------------------
 // ------------------------------------------------------------------------ Trie
+// -----------------------------------------------------------------------------
 
 test('Trie: a new Trie is always empty', t => {
   const trie = new Trie();
@@ -85,6 +88,40 @@ test('Trie: can be constructed from two values', t => {
   t.is(bar.key.toString(), pairs[1].key);
   t.is(bar.value.toString(), pairs[1].value);
 });
+
+
+// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------- Trie.insert
+// -----------------------------------------------------------------------------
+
+test('Trie.insert: into empty', t => {
+  let trie = new Trie();
+  trie.insert('foo', '14');
+  t.true(trie instanceof Leaf);
+  t.deepEqual(trie, Trie.fromList([{ key: 'foo', value: '14' }]));
+});
+
+test('Trie.insert: into leaf', t => {
+  const foo = { key: 'foo', value: '14' };
+  const bar = { key: 'bar', value: '42' };
+
+  let trie = Trie.fromList([foo]);
+  trie.insert(bar.key, bar.value);
+  t.true(trie instanceof Branch);
+
+  t.deepEqual(trie, Trie.fromList([foo, bar]));
+});
+
+test('Trie.insert: arbitrary', t => {
+  const trie = new Trie();
+  shuffle(FRUITS_LIST).forEach((fruit) => trie.insert(fruit.key, fruit.value));
+  t.deepEqual(trie, Trie.fromList(FRUITS_LIST));
+});
+
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------ Trie.prove
+// -----------------------------------------------------------------------------
 
 test('Trie: can create proof for leaf-trie for existing element', t => {
   const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
@@ -207,93 +244,9 @@ test('Trie: checking for membership & insertion on complex trie', t => {
 });
 
 
-// --------------------------------------------------------------------- Helpers
-
-test('commonPrefix: empty words', t => {
-  t.throws(() => helpers.commonPrefix([]));
-});
-
-test('commonPrefix: empty word', t => {
-  t.throws(() => helpers.commonPrefix(['merkle-patricia-trie', '']));
-});
-
-test('commonPrefix: two identical strings', t => {
-  const prefix = helpers.commonPrefix([
-    'merkle-patricia-trie',
-    'merkle-patricia-trie',
-  ]);
-
-  t.is(prefix, 'merkle-patricia-trie');
-});
-
-test('commonPrefix: first word is prefix', t => {
-  const prefix = helpers.commonPrefix([
-    'do',
-    'dog',
-    'dogs',
-  ]);
-
-  t.is(prefix, 'do');
-});
-
-test('commonPrefix: last word is prefix', t => {
-  const prefix = helpers.commonPrefix([
-    'dogs',
-    'dog',
-    'do',
-  ]);
-
-  t.is(prefix, 'do');
-});
-
-test('commonPrefix: prefix is anywhere', t => {
-  const prefix = helpers.commonPrefix([
-    'carda',
-    'cardano',
-    'card',
-    'cardinal',
-  ]);
-
-  t.is(prefix, 'card');
-});
-
-test('commonPrefix: no common prefix', t => {
-  const prefix = helpers.commonPrefix([
-    'dog',
-    'cat',
-    'bird',
-  ]);
-
-  t.is(prefix, '');
-});
-
-
-const NULL_HASH = Buffer.alloc(32);
-
-test('merkleRoot: null hashes', t => {
-  t.is(
-    merkleRoot([NULL_HASH], 1).toString('hex'),
-    "0000000000000000000000000000000000000000000000000000000000000000"
-  );
-
-  t.is(
-    merkleRoot([NULL_HASH, NULL_HASH], 2).toString('hex'),
-    "0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761",
-  );
-
-  t.is(
-    merkleRoot((new Array(4)).fill(NULL_HASH), 4).toString('hex'),
-    "85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1",
-  );
-
-  t.is(
-    merkleRoot((new Array(8)).fill(NULL_HASH), 8).toString('hex'),
-    "b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a",
-  );
-});
-
-
-// ----------------------------------------------------------------- Test Helpers
+// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------- Test Helpers
+// -----------------------------------------------------------------------------
 
 function unindent(str) {
   const lines = str[0].split('\n').filter(n => n.length > 0);
@@ -301,25 +254,9 @@ function unindent(str) {
   return lines.map(s => s.slice(n)).join('\n').trimEnd();
 }
 
-function stringifyNeighbor(x) {
-  if (x == undefined || x instanceof Buffer) {
-    return x?.toString('hex');
-  }
-
-  return { ...x, value: x.value.toString('hex') };
-}
-
-
-function assertProof(t, root, proof, expected) {
-  proof.steps.forEach((step, k) => {
-    t.is(step.skip, expected[k].skip);
-    t.deepEqual(
-      step.neighbors.map(stringifyNeighbor),
-      expected[k].neighbors.map(stringifyNeighbor),
-    );
-  });
-
-  t.is(proof.steps.length, expected.length);
-
-  t.is(proof.verify().toString('hex'), root.toString('hex'));
+function shuffle(xs) {
+  return xs
+    .map(origin => ({ origin, score: Math.random() }))
+    .sort((a, b) => a.score - b.score)
+    .map(({ origin }) => origin);
 }

@@ -1,22 +1,27 @@
 /** @module helpers */
 
 import assert from 'node:assert';
+import { DIGEST_LENGTH, digest } from './crypto.js';
 
+
+/* By convention, the hash of empty tries / trees is the NULL_HASH
+ */
+export const NULL_HASH = Buffer.alloc(DIGEST_LENGTH);
 
 /** Turn a an object whose keys are hex-digits into a sparse vector.
  * Fill gaps with 'undefined' values.
  *
  * @example
- * intoVector({ 1: 'foo' }) // [undefined, 'foo', undefined, ...13 more times]
+ * sparseVector({ 1: 'foo' }) // [undefined, 'foo', undefined, ...13 more times]
  *
  * @example
- * intoVector({ 2: 'bar' }, 3) // [undefined, undefined, 'bar']
+ * sparseVector({ 2: 'bar' }, 3) // [undefined, undefined, 'bar']
  *
  * @param {object} obj A key:value map of nodes.
  * @return {array}
  * @throws {AssertionError} When any key in the object is not a nibble.
  */
-export function intoVector(obj) {
+export function sparseVector(obj) {
   let vector = [];
   for (let i = 1; i <= 16; i += 1) {
     vector.push(undefined);
@@ -157,6 +162,17 @@ export function withEllipsis(msg, cutoff, options) {
 
 
 /**
+ * Convert a character into an hexadecimal digit (a.k.a nibble)
+ *
+ * @param {string} digit A single hex digit
+ * @return {Number}
+ */
+export function nibble(digit) {
+  return Number.parseInt(digit, 16);
+}
+
+
+/**
  * Convert an string of hexadecimal digits into an array of digits a.k.a nibbles
  *
  * @example
@@ -170,7 +186,7 @@ export function withEllipsis(msg, cutoff, options) {
  * @throws {AssertionError} When the string contains non hex-digits.
  */
 export function nibbles(str) {
-  const digits = Array.from(str).map(n => Number.parseInt(n, 16));
+  const digits = Array.from(str).map(nibble);
 
   assert(
     typeof str === 'string' && digits.every(isHexDigit),
@@ -190,3 +206,77 @@ export function nibbles(str) {
 export function isHexDigit(digit) {
   return Number.isInteger(digit) && digit >= 0 && digit <= 15;
 }
+
+
+/**
+ * Compute the Merkle root of a Sparse-Merkle-Trie formed by a node's children.
+ *
+ * @param {Array<{ hash: Buffer }|Buffer|undefined>} children
+ *   A non-empty list of (possibly empty) child nodes (hashes) to merkleize.
+ *
+ * @param {number} [size=16]
+ *   An expected size. Mostly exists to provide a check by default; can be
+ *   overridden in context that matters.
+ *
+ * @return Buffer
+ * @private
+ */
+export function merkleRoot(children, size = 16) {
+  let nodes = children.map(x => x?.hash ?? x ?? NULL_HASH);
+
+  let n = nodes.length;
+
+  assert(
+    n === size,
+    `trying to compute an intermediate Merkle root of ${nodes.length} nodes instead of ${size}`);
+
+  if (n === 1) {
+    return nodes[0];
+  }
+
+  assert(
+    n >= 2 && n % 2 === 0,
+    `trying to compute intermediate Merkle root of an odd number of nodes.`,
+  );
+
+  do {
+    for (let i = 0; 2 * i < n; i += 1) {
+      nodes.push(digest(Buffer.concat(nodes.splice(0, 2))));
+    }
+    n = nodes.length;
+  } while (n > 1);
+
+  return nodes[0];
+}
+
+
+/**
+ * Construct a merkle proof for a given non-empty trie.
+ *
+ * @param {Array<Buffer>} nodes A non-empty list of child nodes to merkleize.
+ * @param {number} me The index of the node we are proving
+ * @return {Array<Buffer>}
+ * @private
+ */
+export function merkleProof(nodes, me) {
+  assert(nodes.length > 1 && nodes.length % 2 === 0);
+  assert(Number.isInteger(me) && me >= 0 && me < nodes.length);
+
+  let neighbors = [];
+
+  let pivot = 8; let n = 8;
+  do {
+    if (me < pivot) {
+      neighbors.push(merkleRoot(nodes.slice(pivot, pivot + n), n))
+      pivot -= (n >> 1);
+    } else {
+      neighbors.push(merkleRoot(nodes.slice(pivot - n, pivot), n));
+      pivot += (n >> 1);
+    }
+    n = n >> 1;
+  } while (n >= 1);
+
+  return neighbors;
+}
+
+

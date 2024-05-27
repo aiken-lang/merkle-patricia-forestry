@@ -1,26 +1,23 @@
-import blake2b from 'blake2b';
 import assert from 'node:assert';
 import { inspect } from 'node:util';
+import { DIGEST_LENGTH, digest } from './crypto.js'
 import {
+  NULL_HASH,
   assertInstanceOf,
   commonPrefix,
   eachLine,
-  intoVector,
+  sparseVector,
+  merkleProof,
+  merkleRoot,
+  nibble,
   nibbles,
   withEllipsis,
 } from './helpers.js'
-
-export * as helpers from './helpers.js';
 
 
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------- Constants
 // -----------------------------------------------------------------------------
-
-/* Size of the digest of the underlying hash algorithm.
- * @private
- */
-const DIGEST_LENGTH = 32; // # of bytes
 
 /* Number of nibbles (i.e. hex-digits) to display for intermediate hashes when
  * inspecting a {@link Trie}. @private
@@ -31,10 +28,6 @@ const DIGEST_SUMMARY_LENGTH = 12; // # of nibbles
  * adding an ellipsis @private
  */
 const PREFIX_CUTOFF = 8; // # of nibbles
-
-/* By convention, the hash of empty tries / trees is the NULL_HASH
- */
-const NULL_HASH = Buffer.alloc(DIGEST_LENGTH);
 
 
 // -----------------------------------------------------------------------------
@@ -84,6 +77,10 @@ export class Trie {
   isEmpty() {
     return this.size == 0;
   }
+
+  /** Recompute a node's size and hash after modification.
+   */
+  reset() {}
 
   /**
    * Construct a Merkle-Patricia {@link Trie} from a list of key/value pairs.
@@ -147,6 +144,32 @@ export class Trie {
   }
 
 
+  /**
+   * Insert a new value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @param {Buffer|string} value
+   *   The value to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @throws {AssertionError} when a value already exists at the given key.
+   */
+  insert(key, value) {
+    return this.into(Leaf, intoPath(key), key, value);
+  }
+
+  into(target, ...args) {
+    this.__proto__ = target.prototype;
+    for (let prop in this) {
+      if (this.hasOwnProperty(prop)) {
+        delete this[prop];
+      }
+    }
+    return Object.assign(this, Reflect.construct(target, args));
+  }
+
   /** Conveniently access a child in the tries at the given path. A path is
    * sequence of nibbles, as an hex-encoded string.
    *
@@ -155,8 +178,7 @@ export class Trie {
    */
   childAt(path) {
     return Array.from(path).reduce((trie, branch) => {
-      const nibble = Number.parseInt(branch, 16);
-      return trie?.children[nibble];
+      return trie?.children[nibble(branch)];
     }, this);
   }
 
@@ -236,13 +258,15 @@ export class Leaf extends Trie {
 
   /** A flag to indicate how to display the key.
    * @type {bool}
+   * @private
    */
-  #displayKeyAsHex
+  displayKeyAsHex
 
   /** A flag to indicate how to display the value.
    * @type {bool}
+   * @private
    */
-  #displayValueAsHex
+  displayValueAsHex
 
 
   /** Create a new {@link Leaf} from a prefix and a value.
@@ -263,11 +287,11 @@ export class Leaf extends Trie {
   constructor(suffix, key, value) {
     super();
 
-    this.#displayKeyAsHex = typeof key !== 'string'
+    this.displayKeyAsHex = typeof key !== 'string'
     key = typeof key === 'string' ? Buffer.from(key) : key;
     assertInstanceOf(Buffer, { key });
 
-    this.#displayValueAsHex = typeof value !== 'string'
+    this.displayValueAsHex = typeof value !== 'string'
     value = typeof value === 'string' ? Buffer.from(value) : value;
     assertInstanceOf(Buffer, { value });
 
@@ -275,14 +299,15 @@ export class Leaf extends Trie {
 
     assert(
       digest(key).toString('hex').endsWith(suffix),
-      `The suffix ${suffix} isn't a valid extension of ${this.#displayKeyAsHex ? key.toString('hex') : key}`,
+      `The suffix ${suffix} isn't a valid extension of ${this.displayKeyAsHex ? key.toString('hex') : key}`,
     );
 
     this.size = 1;
     this.key = key;
     this.value = value;
+    this.prefix = suffix;
 
-    this.setPrefix(suffix, digest(value));
+    this.reset();
   }
 
 
@@ -290,11 +315,11 @@ export class Leaf extends Trie {
    * are done in lock-step because the node's hash crucially includes its prefix.
    *
    * @param {string} prefix A sequence of nibbles.
-   * @param {Buffer} hash A hash digest of the value.
+   * @param {Buffer} value A hash digest of the value.
    * @return {Trie} A reference to the underlying trie with its prefix modified.
    * @private
    */
-  setPrefix(prefix, hash) {
+  static computeHash(prefix, value) {
     // NOTE:
     // We append the remaining prefix to the value. However, to make this
     // step more efficient on-chain, we append it as a raw bytestring instead of
@@ -315,14 +340,59 @@ export class Leaf extends Trie {
     );
 
     assert(
-      hash.length === DIGEST_LENGTH,
-      `hash must be a ${DIGEST_LENGTH}-byte digest in 'setPrefix' but it is ${hash?.toString('hex')}`
+      value.length === DIGEST_LENGTH,
+      `value must be a ${DIGEST_LENGTH}-byte digest but it is ${value?.toString('hex')}`
     );
 
-    this.hash = digest(Buffer.concat([head, tail, hash]));
-    this.prefix = prefix;
+    return digest(Buffer.concat([head, tail, value]));
+  }
 
-    return this;
+
+  /** Recompute the leaf's hash after modification.
+   */
+  reset() {
+    this.hash = Leaf.computeHash(this.prefix, digest(this.value));
+  }
+
+
+  /**
+   * Insert a new value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @param {Buffer|string} value
+   *   The value to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @throws {AssertionError} when a value already exists at the given key.
+   */
+  insert(key, value) {
+    assert(this.key !== key, 'already in trie');
+    assert(this.prefix.length > 0);
+
+    const thisPath = this.prefix;
+
+    const newPath = intoPath(key).slice(-thisPath.length);
+
+    const prefix = commonPrefix([thisPath, newPath]);
+
+    const thisNibble = nibble(thisPath[prefix.length]);
+
+    const newNibble = nibble(newPath[prefix.length]);
+
+    return this.into(Branch, prefix, {
+        [thisNibble]: new Leaf(
+          thisPath.slice(prefix.length + 1),
+          this.displayKeyAsHex ? this.key : this.key.toString(),
+          this.displayValueAsHex ? this.value : this.value.toString(),
+        ),
+        [newNibble]: new Leaf(
+          newPath.slice(prefix.length + 1),
+          key,
+          value
+        ),
+    });
   }
 
 
@@ -341,13 +411,13 @@ export class Leaf extends Trie {
 
     const prefix = withEllipsis(this.prefix, PREFIX_CUTOFF, options);
 
-    const key = options.stylize(this.#displayKeyAsHex
+    const key = options.stylize(this.displayKeyAsHex
       ? this.key.toString('hex')
       : this.key,
       'boolean'
     );
 
-    const value = options.stylize(this.#displayValueAsHex
+    const value = options.stylize(this.displayValueAsHex
       ? this.value.toString('hex')
       : this.value,
       'string'
@@ -403,7 +473,7 @@ export class Branch extends Trie {
     super();
 
     children = typeof children === 'object' && children !== null && !Array.isArray(children)
-      ? intoVector(children)
+      ? sparseVector(children)
       : children;
 
     // NOTE: We use 'undefined' to represent empty sub-tries mostly because
@@ -436,30 +506,95 @@ export class Branch extends Trie {
       'children must be a vector of *exactly 16* elements (possibly undefined)',
     );
 
-    this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
-    this.setPrefix(prefix, merkleRoot(this.children));
-  }
+    this.prefix = prefix;
 
+    this.reset();
+  }
 
   /** Set the prefix on a branch, and computes its corresponding hash. Both steps
    * are done in lock-step because the node's hash crucially includes its prefix.
    *
    * @param {string} prefix A sequence of nibbles.
-   * @param {Buffer} hash A hash digest of the value.
+   * @param {Buffer} root A root merkle tree of the node's children
    * @return {Trie} A reference to the underlying trie with its prefix modified.
    * @private
    */
-  setPrefix(prefix, hash) {
+  static computeHash(prefix, root) {
     assert(
-      hash.length === DIGEST_LENGTH,
-      `hash must be a ${DIGEST_LENGTH}-byte digest in 'setPrefix' but it is ${hash?.toString('hex')}`
+      root.length === DIGEST_LENGTH,
+      `root must be a ${DIGEST_LENGTH}-byte digest but it is ${root?.toString('hex')}`
     );
 
-    this.hash = digest(Buffer.concat([nibbles(prefix), hash]));
-    this.prefix = prefix;
+    return digest(Buffer.concat([nibbles(prefix), root]));
+  }
 
-    return this;
+
+  /** Recompute a branch's size and hash after modification.
+   */
+  reset() {
+    this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
+    this.size = this.children.reduce((size, child) => size + (child?.size || 0), 0);
+  }
+
+
+  /**
+   * Insert a new value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @param {Buffer|string} value
+   *   The value to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @throws {AssertionError} when a value already exists at the given key.
+   */
+  insert(key, value) {
+    const walk = (node, path, parents) => {
+      const prefix = node.prefix.length > 0
+        ? commonPrefix([node.prefix, path])
+        : '';
+
+      path = path.slice(prefix.length);
+
+      const thisNibble = nibble(path[0]);
+
+      if (prefix.length < node.prefix.length) {
+        const newPrefix = node.prefix.slice(prefix.length);
+        const newNibble = nibble(newPrefix[0]);
+
+        node.into(Branch, prefix, {
+          [thisNibble]: new Leaf(
+            path.slice(1),
+            key,
+            value,
+          ),
+          [newNibble]: new Branch(
+            node.prefix.slice(prefix.length + 1),
+            node.children,
+          ),
+        });
+
+        return parents;
+      }
+
+      parents.unshift(node);
+
+      const child = node.children[thisNibble];
+
+      if (child === undefined) {
+        node.children[thisNibble] = new Leaf(path.slice(1), key, value);
+        return parents;
+      } else if (child instanceof Leaf) {
+        child.insert(key, value);
+        return parents;
+      } else {
+        return walk(child, path.slice(1), parents);
+      }
+    };
+
+    walk(this, intoPath(key), []).forEach(node => node.reset());
   }
 
 
@@ -477,7 +612,7 @@ export class Branch extends Trie {
 
     path = path.slice(skip);
 
-    const branch = Number.parseInt(path[0], 16);
+    const branch = nibble(path[0]);
     const child = this.children[branch];
 
     assert(
@@ -629,7 +764,7 @@ export class Proof {
             neighbor: {
               prefix: nibbles(neighbor.prefix),
               nibble: children.indexOf(neighbor),
-              value: merkleRoot(neighbor.children),
+              root: merkleRoot(neighbor.children),
             }
           }
       );
@@ -684,7 +819,7 @@ export class Proof {
           `no value at path ${this.#path.slice(0, cursor)}`
         );
 
-        return Leaf.prototype.setPrefix.call({}, suffix, digest(this.#value)).hash
+        return Leaf.computeHash(suffix, digest(this.#value))
       }
 
       const isLastStep = this.#steps[ix + 1] === undefined;
@@ -693,13 +828,13 @@ export class Proof {
 
       const me = loop(nextCursor, ix + 1);
 
-      const nibble = Number.parseInt(this.#path[nextCursor - 1], 16);
+      const thisNibble = nibble(this.#path[nextCursor - 1]);
 
       // Merge nodes together into a new (sub-)root.
       const root = (nodes) => {
         const prefix = this.#path.slice(cursor, nextCursor - 1);
-        const merkle = merkleRoot(intoVector(nodes));
-        return Branch.prototype.setPrefix.call({}, prefix, merkle).hash;
+        const merkle = merkleRoot(sparseVector(nodes));
+        return Branch.computeHash(prefix, merkle);
       };
 
       switch (step.type) {
@@ -729,26 +864,26 @@ export class Proof {
             13: h(lvl1, h(lvl2, h(h(lvl4, me), lvl3))),
             14: h(lvl1, h(lvl2, h(lvl3, h(me, lvl4)))),
             15: h(lvl1, h(lvl2, h(lvl3, h(lvl4, me)))),
-          }[nibble];
+          }[thisNibble];
 
           const prefix = this.#path.slice(cursor, nextCursor - 1);
 
-          return Branch.prototype.setPrefix.call({}, prefix, merkle).hash;
+          return Branch.computeHash(prefix, merkle);
         }
 
         case Proof.#TYPE_FORK: {
           if (!withElement && isLastStep) {
             const prefix = [Buffer.from([step.neighbor.nibble]), step.neighbor.prefix];
-            return digest(Buffer.concat([...prefix, step.neighbor.value]));
+            return digest(Buffer.concat([...prefix, step.neighbor.root]));
           }
 
-          assert(step.neighbor.nibble !== nibble);
+          assert(step.neighbor.nibble !== thisNibble);
 
           return root({
-            [nibble]: me,
+            [thisNibble]: me,
             [step.neighbor.nibble]: digest(Buffer.concat([
               step.neighbor.prefix,
-              step.neighbor.value
+              step.neighbor.root,
             ]))
           });
         }
@@ -758,20 +893,20 @@ export class Proof {
 
           assert(neighborPath.slice(0, cursor) === this.#path.slice(0, cursor));
 
-          const neighborNibble = Number.parseInt(neighborPath[nextCursor - 1], 16);
+          const neighborNibble = nibble(neighborPath[nextCursor - 1]);
 
-          assert(neighborNibble !== nibble);
+          assert(neighborNibble !== thisNibble);
 
           if (!withElement && isLastStep) {
             const suffix = neighborPath.slice(cursor);
-            return Leaf.prototype.setPrefix.call({}, suffix, step.neighbor.value).hash;
+            return Leaf.computeHash(suffix, step.neighbor.value);
           }
 
           const suffix = neighborPath.slice(nextCursor);
 
           return root({
-            [nibble]: me,
-            [neighborNibble]: Leaf.prototype.setPrefix.call({}, suffix, step.neighbor.value).hash,
+            [thisNibble]: me,
+            [neighborNibble]: Leaf.computeHash(suffix, step.neighbor.value),
           });
         }
 
@@ -805,7 +940,7 @@ export class Proof {
           neighbor: {
             ...step.neighbor,
             prefix: step.neighbor.prefix.toString('hex'),
-            value: step.neighbor.value.toString('hex'),
+            root: step.neighbor.root.toString('hex'),
           }
         };
       },
@@ -837,7 +972,7 @@ export class Proof {
           return `  Branch { skip: ${step.skip}, neighbors: #"${step.neighbors}" },\n`
         }
         case Proof.#TYPE_FORK.description: {
-          const neighbor = `Neighbor { nibble: ${step.neighbor.nibble}, prefix: #"${step.neighbor.prefix}", root: #"${step.neighbor.value}" }`;
+          const neighbor = `Neighbor { nibble: ${step.neighbor.nibble}, prefix: #"${step.neighbor.prefix}", root: #"${step.neighbor.root}" }`;
           return `  Fork { skip: ${step.skip}, neighbor: ${neighbor} },\n`
         }
         case Proof.#TYPE_LEAF.description: {
@@ -860,93 +995,6 @@ export class Proof {
 // -----------------------------------------------------------------------------
 // --------------------------------------------------------------------- Helpers
 // -----------------------------------------------------------------------------
-
-/** Compute a hash digest of the given msg buffer.
- *
- * @param {Buffer} msg Payload to hash
- * @return {Buffer} The (blake2b) hash digest
- * @private
- */
-export function digest(msg) {
-  return Buffer.from(
-    blake2b(DIGEST_LENGTH)
-      .update(msg)
-      .digest()
-  );
-}
-
-
-/**
- * Compute the Merkle root of a Sparse-Merkle-Trie formed by a node's children.
- *
- * @param {Array<{ hash: Buffer }|Buffer|undefined>} children
- *   A non-empty list of (possibly empty) child nodes (hashes) to merkleize.
- *
- * @param {number} [size=16]
- *   An expected size. Mostly exists to provide a check by default; can be
- *   overridden in context that matters.
- *
- * @return Buffer
- * @private
- */
-export function merkleRoot(children, size = 16) {
-  let nodes = children.map(x => x?.hash ?? x ?? NULL_HASH);
-
-  let n = nodes.length;
-
-  assert(
-    n === size,
-    `trying to compute an intermediate Merkle root of ${nodes.length} nodes instead of ${size}`);
-
-  if (n === 1) {
-    return nodes[0];
-  }
-
-  assert(
-    n >= 2 && n % 2 === 0,
-    `trying to compute intermediate Merkle root of an odd number of nodes.`,
-  );
-
-  do {
-    for (let i = 0; 2 * i < n; i += 1) {
-      nodes.push(digest(Buffer.concat(nodes.splice(0, 2))));
-    }
-    n = nodes.length;
-  } while (n > 1);
-
-  return nodes[0];
-}
-
-
-/**
- * Construct a merkle proof for a given non-empty trie.
- *
- * @param {Array<Buffer>} nodes A non-empty list of child nodes to merkleize.
- * @param {number} me The index of the node we are proving
- * @return {Array<Buffer>}
- * @private
- */
-export function merkleProof(nodes, me) {
-  assert(nodes.length > 1 && nodes.length % 2 === 0);
-  assert(Number.isInteger(me) && me >= 0 && me < nodes.length);
-
-  let neighbors = [];
-
-  let pivot = 8; let n = 8;
-  do {
-    if (me < pivot) {
-      neighbors.push(merkleRoot(nodes.slice(pivot, pivot + n), n))
-      pivot -= (n >> 1);
-    } else {
-      neighbors.push(merkleRoot(nodes.slice(pivot - n, pivot), n));
-      pivot += (n >> 1);
-    }
-    n = n >> 1;
-  } while (n >= 1);
-
-  return neighbors;
-}
-
 
 /** Turn any key into a path of nibbles.
  *
