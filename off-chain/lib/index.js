@@ -861,7 +861,7 @@ export class Branch extends Trie {
   /** Perform an operation with the node's children, without keeping them
    * around once done.
    *
-   * @param {async function} callback
+   * @param {function} callback
    * @return {Promise<any>}
    * @private
    */
