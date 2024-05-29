@@ -78,12 +78,12 @@ export class Trie {
    * @param {Store} [store]
    *   The trie's store, default to an in-memory store if omitted.
    */
-  constructor(store = new Store()) {
+  constructor(hash = NULL_HASH, prefix = '', size = 0, store = new Store()) {
     assertInstanceOf(Store, { store });
 
-    this.size = 0;
-    this.hash = NULL_HASH;
-    this.prefix = '';
+    this.hash = hash;
+    this.prefix = prefix;
+    this.size = size;
     this.store = store;
   }
 
@@ -94,14 +94,6 @@ export class Trie {
    */
   isEmpty() {
     return this.size == 0;
-  }
-
-
-  /** Recompute a node's size and hash after modification.
-   * @private
-   */
-  async reset() {
-    return this;
   }
 
 
@@ -125,7 +117,7 @@ export class Trie {
       // ------------------- A leaf
       if (keyValues.length === 1) {
         const [kv] = keyValues;
-        return new Leaf(
+        return Leaf.from(
           prefix,
           kv.key,
           kv.value,
@@ -164,7 +156,7 @@ export class Trie {
 
       const children = nodes.map(trie => trie.isEmpty() ? undefined : trie);
 
-      return new Branch(prefix, children, store);
+      return Branch.from(prefix, children, store);
     }
 
     return loop('', elements.map(kv => ({ ...kv, path: intoPath(kv.key) })));
@@ -204,7 +196,8 @@ export class Trie {
    * @private
    */
   async into(target, ...args) {
-    const hash = this.hash;
+    const previousHash = this.hash;
+
     const store = this.store;
 
     this.__proto__ = target.prototype;
@@ -214,14 +207,9 @@ export class Trie {
       }
     }
 
-    const self = Object.assign(
-      this,
-      await Reflect.construct(target, args.concat(store))
-    );
+    const self = Object.assign(this, await target.from(...args.concat(store)))
 
-    await this.store.del(hash);
-
-    return self;
+    return self.save(previousHash);
   }
 
 
@@ -240,7 +228,7 @@ export class Trie {
         return undefined;
       }
 
-      return this.store.get(child.hash);
+      return this.store.get(child.hash, Trie.deserialise);
     }, this);
   }
 
@@ -275,6 +263,24 @@ export class Trie {
    */
   [inspect.custom](_depth, _options, _inspect) {
     return 'ø';
+  }
+
+  /** Recover a Trie from an on-disk serialization format.
+   *
+   * @param {object} blob A serialised object.
+   * @param {Store} store An instance of the underlying store.
+   * @return {Promise<Trie>}
+   * @private
+   */
+  static async deserialise(hash, blob, store) {
+    switch (blob?.__kind) {
+      case 'Leaf':
+        return Leaf.deserialise(hash, blob, store);
+      case 'Branch':
+        return Branch.deserialise(hash, blob, store);
+      default:
+        throw new Error(`unexpected blob to deserialise: ${blob?.__kind}: ${blob}`);
+    }
   }
 }
 
@@ -312,7 +318,19 @@ export class Leaf extends Trie {
 
 
   /** Create a new {@link Leaf} from a prefix and a value.
-   *
+   * @private
+   */
+  constructor(hash, prefix, key, displayKeyAsHex, value, displayValueAsHex, store) {
+    super(hash, prefix, 1, store);
+
+    this.key = key;
+    this.displayKeyAsHex = displayKeyAsHex;
+
+    this.value = value;
+    this.displayValueAsHex = displayValueAsHex;
+  }
+
+  /**
    * @param {string} prefix
    *   A sequence of nibble, possibly (albeit rarely) empty. In the case of
    *   leaves, the prefix should rather be called 'suffix' as it describes what
@@ -327,16 +345,14 @@ export class Leaf extends Trie {
    * @param {Store} [store]
    *   The data-store to use for storing and retrieving the underlying trie.
    *
-   * @private
+   * @return {Promise<Leaf>}
    */
-  constructor(suffix, key, value, store) {
-    super(store);
-
-    this.displayKeyAsHex = typeof key !== 'string'
+  static async from(suffix, key, value, store) {
+    const displayKeyAsHex = typeof key !== 'string'
     key = typeof key === 'string' ? Buffer.from(key) : key;
     assertInstanceOf(Buffer, { key });
 
-    this.displayValueAsHex = typeof value !== 'string'
+    const displayValueAsHex = typeof value !== 'string'
     value = typeof value === 'string' ? Buffer.from(value) : value;
     assertInstanceOf(Buffer, { value });
 
@@ -344,17 +360,21 @@ export class Leaf extends Trie {
 
     assert(
       digest(key).toString('hex').endsWith(suffix),
-      `The suffix ${suffix} isn't a valid extension of ${this.displayKeyAsHex ? key.toString('hex') : key}`,
+      `The suffix ${suffix} isn't a valid extension of ${displayKeyAsHex ? key.toString('hex') : key}`,
     );
 
-    this.size = 1;
-    this.key = key;
-    this.value = value;
-    this.prefix = suffix;
+    const leaf = new Leaf(
+      Leaf.computeHash(suffix, digest(value)),
+      suffix,
+      key,
+      displayKeyAsHex,
+      value,
+      displayValueAsHex,
+      store
+    );
 
-    return this.reset();
+    return leaf.save();
   }
-
 
   /** Set the prefix on a Leaf, and computes its corresponding hash. Both steps
    * are done in lock-step because the node's hash crucially includes its prefix.
@@ -393,14 +413,13 @@ export class Leaf extends Trie {
   }
 
 
-  /** Recompute the leaf's hash after modification.
+  /** Store a leaf on disk.
    *
    * @return {Promise<Trie>}
    * @private
    */
-  async reset() {
-    this.hash = Leaf.computeHash(this.prefix, digest(this.value));
-    await this.store.put(this.hash, this.serialise());
+  async save() {
+    await this.store.put(this.hash, this);
     return this;
   }
 
@@ -435,13 +454,13 @@ export class Leaf extends Trie {
     const newNibble = nibble(newPath[prefix.length]);
 
     return this.into(Branch, prefix, {
-        [thisNibble]: await new Leaf(
+        [thisNibble]: await Leaf.from(
           thisPath.slice(prefix.length + 1),
           this.displayKeyAsHex ? this.key : this.key.toString(),
           this.displayValueAsHex ? this.value : this.value.toString(),
           this.store,
         ),
-        [newNibble]: await new Leaf(
+        [newNibble]: await Leaf.from(
           newPath.slice(prefix.length + 1),
           key,
           value,
@@ -493,9 +512,41 @@ export class Leaf extends Trie {
   }
 
 
-  // TODO
+  /** Serialise a Leaf to a format suitable for storage on-disk.
+   *
+   * @return {object}
+   * @private
+   */
   serialise() {
-    return this;
+    return {
+      __kind: 'Leaf',
+      prefix: this.prefix,
+      key: this.key.toString('hex'),
+      value: this.value.toString('hex'),
+      displayKeyAsHex: this.displayKeyAsHex,
+      displayValueAsHex: this.displayValueAsHex,
+    };
+  }
+
+
+  /** Recover a Leaf from an on-disk serialization format.
+   *
+   * @param {Buffer} hash The object's id/hash
+   * @param {object} blob A serialised object.
+   * @param {Store} store An instance of the underlying store.
+   * @return {Promise<Trie>}
+   * @private
+   */
+  static async deserialise(hash, blob, store) {
+    return new Leaf(
+      hash,
+      blob.prefix,
+      Buffer.from(blob.key, 'hex'),
+      blob.displayKeyAsHex,
+      Buffer.from(blob.value, 'hex'),
+      blob.displayValueAsHex,
+      store,
+    );
   }
 }
 
@@ -512,9 +563,14 @@ export class Leaf extends Trie {
 export class Branch extends Trie {
   /** A sparse array of child sub-tries.
    *
-   * @type {Array<Trie|undefined>}
+   * @type {Array<Trie|{ hash: Buffer }|undefined>}
    */
   children;
+
+  constructor(hash, prefix, children, size, store) {
+    super(hash, prefix, size, store);
+    this.children = children;
+  }
 
   /**
    * Create a new branch node from a (hex-encoded) prefix and 16 children.
@@ -530,15 +586,13 @@ export class Branch extends Trie {
    * @param {Store} [store]
    *   The data-store to use for storing and retrieving the underlying trie.
    *
-   * @return {Branch}
+   * @return {Promise<Branch>}
    * @private
    */
-  constructor(prefix = '', children, store) {
-    super(store);
-
+  static async from(prefix, children, store) {
     assert(children !== undefined);
 
-    children = typeof children === 'object' && children !== null && !Array.isArray(children)
+    children = !Array.isArray(children)
       ? sparseVector(children)
       : children;
 
@@ -576,11 +630,17 @@ export class Branch extends Trie {
       'children must be a vector of *exactly 16* elements (possibly undefined)',
     );
 
-    this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
-    this.children = children;
-    this.prefix = prefix;
+    const size = children.reduce((size, child) => size + (child?.size || 0), 0);
 
-    return this.reset();
+    const branch = new Branch(
+      Branch.computeHash(prefix, merkleRoot(children)),
+      prefix,
+      children,
+      size,
+      store,
+    );
+
+    return branch.save();
   }
 
   /** Set the prefix on a branch, and computes its corresponding hash. Both steps
@@ -633,13 +693,13 @@ export class Branch extends Trie {
         const newNibble = nibble(newPrefix[0]);
 
         await node.into(Branch, prefix, {
-          [thisNibble]: await new Leaf(
+          [thisNibble]: await Leaf.from(
             path.slice(1),
             key,
             value,
             this.store,
           ),
-          [newNibble]: await new Branch(
+          [newNibble]: await Branch.from(
             node.prefix.slice(prefix.length + 1),
             node.children,
             this.store,
@@ -654,7 +714,7 @@ export class Branch extends Trie {
       const child = node.children[thisNibble];
 
       if (child === undefined) {
-        node.children[thisNibble] = await new Leaf(
+        node.children[thisNibble] = await Leaf.from(
           path.slice(1),
           key,
           value,
@@ -673,8 +733,8 @@ export class Branch extends Trie {
 
     const parents = await loop(this, intoPath(key), []);
     await Promise.all(parents.map(async (node) => {
-      await node.reset();
       node.size += 1;
+      await node.save(node.hash);
     }));
 
     return this;
@@ -787,19 +847,20 @@ export class Branch extends Trie {
    * @return {Promise<Branch>} This current object, eventually modified.
    * @private
    */
-  async reset() {
+  async save(previousHash) {
     // TODO: delete & set should really be happening in the same batch / transaction
-    if (this.hash !== undefined) {
-      await this.store.del(this.hash);
+    if (previousHash !== undefined) {
+      await this.store.del(previousHash);
     }
 
     this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
+
     this.children = this.children.map(child => child instanceof Trie
       ? { hash: child.hash }
       : child
     );
 
-    await this.store.put(this.hash, this.serialise());
+    await this.store.put(this.hash, this);
 
     return this;
   }
@@ -815,7 +876,7 @@ export class Branch extends Trie {
   async withChildren(callback) {
     return callback(await Promise.all(this.children.map(child => child === undefined
       ? child
-      : this.store.get(child.hash)
+      : this.store.get(child.hash, Trie.deserialise)
     )));
   }
 
@@ -844,7 +905,9 @@ export class Branch extends Trie {
 
         return loop(
           n - 1,
-          child instanceof Trie ? child : await node.store.get(child.hash)
+          child instanceof Trie
+            ? child
+            : await node.store.get(child.hash, Trie.deserialise)
         );
       }));
 
@@ -855,9 +918,43 @@ export class Branch extends Trie {
   }
 
 
-  // TODO
+  /** Serialise a Branch to a format suitable for storage on-disk.
+   * @return {object}
+   * @private
+   */
   serialise() {
-    return this;
+    return {
+      __kind: 'Branch',
+      prefix: this.prefix,
+      children: this.children.map(child => child?.hash.toString('hex')),
+      size: this.size,
+    };
+  }
+
+
+  /** Recover a Branch from an on-disk serialization format.
+   *
+   * @param {Buffer} hash The object's id/hash
+   * @param {object} blob A serialised object.
+   * @param {Store} store An instance of the underlying store.
+   * @return {Promise<Trie>}
+   * @private
+   */
+  static async deserialise(hash, blob, store) {
+    return new Branch(
+      hash,
+      blob.prefix,
+      blob.children.map(child => {
+        if (child === undefined) {
+          return undefined;
+        }
+        return { hash: Buffer.from(child, 'hex') };
+      }),
+      blob.size,
+      store,
+    );
+
+    obj.self;
   }
 }
 
