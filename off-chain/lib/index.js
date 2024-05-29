@@ -73,7 +73,7 @@ export class Trie {
 
 
   /** Construct a new empty trie. This constructor is mostly useless. See
-   * {@link Trie.fromList} for instead.
+   * {@link Trie.fromList} or {@link Trie.load} instead.
    *
    * @param {Store} [store]
    *   The trie's store, default to an in-memory store if omitted.
@@ -85,6 +85,18 @@ export class Trie {
     this.prefix = prefix;
     this.size = size;
     this.store = store;
+  }
+
+
+  /** Load a trie from disk.
+   *
+   * @param {Buffer} hash
+   *   The hash
+   * @param {Store} store
+   *   The store to load the Trie from.
+   */
+  static async load(hash, store) {
+    return store.get(hash, Trie.deserialise);
   }
 
 
@@ -101,11 +113,10 @@ export class Trie {
    * Construct a Merkle-Patricia {@link Trie} from a list of key/value pairs.
    *
    * @param {Array<{key: Buffer|string, value: Buffer|string}>} pairs
+   * @param {Store} [store] An optional store to store and retrieve nodes from.
    * @return {Promise<Trie>}
    */
-  static async fromList(elements) {
-    let store = new Store();
-
+  static async fromList(elements, store = new Store()) {
     async function loop(branch, keyValues) {
       // ------------------- An empty trie
       if (keyValues.length === 0) {
@@ -677,6 +688,8 @@ export class Branch extends Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   async insert(key, value) {
+    this.store.beginBatch();
+
     const loop = async (node, path, parents) => {
       const prefix = node.prefix.length > 0
         ? commonPrefix([node.prefix, path])
@@ -732,10 +745,13 @@ export class Branch extends Trie {
     };
 
     const parents = await loop(this, intoPath(key), []);
+
     await Promise.all(parents.map(async (node) => {
       node.size += 1;
       await node.save(node.hash);
     }));
+
+    await this.store.commitBatch();
 
     return this;
   }
@@ -848,7 +864,6 @@ export class Branch extends Trie {
    * @private
    */
   async save(previousHash) {
-    // TODO: delete & set should really be happening in the same batch / transaction
     if (previousHash !== undefined) {
       await this.store.del(previousHash);
     }

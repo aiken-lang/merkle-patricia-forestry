@@ -121,6 +121,38 @@ test('Trie.insert: into leaf', async t => {
   t.deepEqual(trie, await Trie.fromList([foo, bar]));
 });
 
+test('Trie.load', async t => {
+  const store = new Store(tmpFilename());
+
+  await store.ready();
+
+  await Trie.fromList(FRUITS_LIST, store);
+
+  const root = Buffer.from("ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd", 'hex');
+
+  const trie = await Trie.load(root, store);
+
+  t.is(inspect(trie), unindent`
+    ╔═══════════════════════════════════════════════════════════════════╗
+    ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
+    ╚═══════════════════════════════════════════════════════════════════╝
+     ┌─ 0 #a8b499ebb15a
+     ├─ 1 #ea27de91b695
+     ├─ 2 #33df330965d7
+     ├─ 3 #5a5985680607
+     ├─ 4 #8187d8a3f1cf
+     ├─ 5 #630f527d86d1
+     ├─ 7 #84301478aa70
+     ├─ 8 #a3721b3311f1
+     ├─ a #a13acbf54844
+     ├─ b #ed869762c74c
+     ├─ c #d653df9bae61
+     ├─ d #17d9adcb708f
+     ├─ e #5f1fd0952856
+     └─ f #209a78c802ca
+  `);
+});
+
 test('Trie.insert: arbitrary', async t => {
   await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
     const trie = await FRUITS_LIST.reduce(async (trie, fruit) => {
