@@ -1,4 +1,5 @@
 import test from 'ava';
+import { Store } from '../lib/store.js';
 import { Leaf, Branch, Proof, Trie } from '../lib/index.js';
 import * as helpers from '../lib/helpers.js';
 import { inspect } from 'node:util';
@@ -76,6 +77,8 @@ test('Trie: can be constructed from two values', t => {
   t.is(trie.size, 2);
   t.false(trie instanceof Leaf);
 
+  trie.fetchChildren();
+
   const foo = trie.children[11];
   t.true(foo instanceof Leaf);
   t.is(foo.prefix.length, 63);
@@ -115,61 +118,34 @@ test('Trie.insert: into leaf', t => {
 test('Trie.insert: arbitrary', t => {
   const trie = new Trie();
   shuffle(FRUITS_LIST).forEach((fruit) => trie.insert(fruit.key, fruit.value));
-  t.deepEqual(trie, Trie.fromList(FRUITS_LIST));
-});
 
-
-// -----------------------------------------------------------------------------
-// ------------------------------------------------------------------ Trie.prove
-// -----------------------------------------------------------------------------
-
-test('Trie: can create proof for leaf-trie for existing element', t => {
-  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
-  const proof = trie.prove('foo');
-  t.is(
-    proof.verify().toString('hex'),
-    trie.hash.toString('hex'),
-  );
-});
-
-test('Trie: cannot create proof for leaf-trie for non-existing elements', t => {
-  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
-  const proof = trie.prove('bar');
-  t.throws(() => proof.verify());
-});
-
-test('Trie: can create proof for simple tries', t => {
-  const pairs = [
-    { key: 'foo', value: '14' },
-    { key: 'bar', value: '42' },
-  ];
-
-  const trie = Trie.fromList(pairs);
-  t.is(trie.size, 2);
+  t.false(trie.children.some(node => node !== undefined && node instanceof Trie))
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #5e68dce55d03ea2ff4093cb88e6a6c5ad5fca7943800683cfebef6007787d04c ║
+    ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
     ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 84418..[55 digits]..e71d #96eed322c80b { bar → 42 }
-     └─ b8fe9..[55 digits]..49fd #6fbcdcf84771 { foo → 14 }
+     ┌─ 0 #a8b499ebb15a
+     ├─ 1 #ea27de91b695
+     ├─ 2 #33df330965d7
+     ├─ 3 #5a5985680607
+     ├─ 4 #8187d8a3f1cf
+     ├─ 5 #630f527d86d1
+     ├─ 7 #84301478aa70
+     ├─ 8 #a3721b3311f1
+     ├─ a #a13acbf54844
+     ├─ b #ed869762c74c
+     ├─ c #d653df9bae61
+     ├─ d #17d9adcb708f
+     ├─ e #5f1fd0952856
+     └─ f #209a78c802ca
   `);
 
-  const proofs = {
-    foo: trie.prove('foo'),
-    bar: trie.prove('bar'),
-  };
+  const sameTrie = Trie.fromList(FRUITS_LIST);
+  t.deepEqual(trie, sameTrie);
 
-  t.true(proofs.foo.verify().equals(trie.hash));
-  t.true(proofs.bar.verify().equals(trie.hash));
-
-  t.throws(() => trie.prove('fo'));
-  t.throws(() => trie.prove('ba'));
-  t.throws(() => trie.prove('foobar'));
-});
-
-test('Trie: checking for membership & insertion on complex trie', t => {
-  const trie = Trie.fromList(FRUITS_LIST);
-
+  trie.fetchChildren(Number.MAX_SAFE_INTEGER);
+  sameTrie.fetchChildren(Number.MAX_SAFE_INTEGER);
+  t.deepEqual(trie, sameTrie);
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
     ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
@@ -219,6 +195,62 @@ test('Trie: checking for membership & insertion on complex trie', t => {
         ├─ 63c88..[54 digits]..21ca #da480b0fea67 { papaya[uid: 0] → 🤷 }
         └─ b69c0..[54 digits]..2145 #88850a4e3205 { grapes[uid: 0] → 🍇 }
   `);
+
+  t.is(trie.store.size, 45);
+});
+
+
+// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------ Trie.prove
+// -----------------------------------------------------------------------------
+
+test('Trie: can create proof for leaf-trie for existing element', t => {
+  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
+  const proof = trie.prove('foo');
+  t.is(
+    proof.verify().toString('hex'),
+    trie.hash.toString('hex'),
+  );
+});
+
+test('Trie: cannot create proof for leaf-trie for non-existing elements', t => {
+  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
+  const proof = trie.prove('bar');
+  t.throws(() => proof.verify());
+});
+
+test('Trie: can create proof for simple tries', t => {
+  const pairs = [
+    { key: 'foo', value: '14' },
+    { key: 'bar', value: '42' },
+  ];
+
+  const trie = Trie.fromList(pairs);
+  t.is(trie.size, 2);
+  trie.fetchChildren(1);
+  t.is(inspect(trie), unindent`
+    ╔═══════════════════════════════════════════════════════════════════╗
+    ║ #5e68dce55d03ea2ff4093cb88e6a6c5ad5fca7943800683cfebef6007787d04c ║
+    ╚═══════════════════════════════════════════════════════════════════╝
+     ┌─ 84418..[55 digits]..e71d #96eed322c80b { bar → 42 }
+     └─ b8fe9..[55 digits]..49fd #6fbcdcf84771 { foo → 14 }
+  `);
+
+  const proofs = {
+    foo: trie.prove('foo'),
+    bar: trie.prove('bar'),
+  };
+
+  t.true(proofs.foo.verify().equals(trie.hash));
+  t.true(proofs.bar.verify().equals(trie.hash));
+
+  t.throws(() => trie.prove('fo'));
+  t.throws(() => trie.prove('ba'));
+  t.throws(() => trie.prove('foobar'));
+});
+
+test('Trie: checking for membership & insertion on complex trie', t => {
+  const trie = Trie.fromList(FRUITS_LIST);
 
   t.is(trie.size, 30);
 

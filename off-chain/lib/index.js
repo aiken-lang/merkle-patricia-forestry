@@ -13,6 +13,7 @@ import {
   nibbles,
   withEllipsis,
 } from './helpers.js'
+import { Store } from './store.js';
 
 
 // -----------------------------------------------------------------------------
@@ -61,13 +62,18 @@ export class Trie {
    */
   prefix;
 
+  store;
+
   /** Construct a new empty trie. This constructor is mostly useless. See
    * {@link Trie.fromList} for instead.
+   *
+   * @param {Store} store
    */
-  constructor() {
+  constructor(store = new Store()) {
     this.size = 0;
     this.hash = NULL_HASH;
     this.prefix = '';
+    this.store = store;
   }
 
   /**
@@ -89,6 +95,8 @@ export class Trie {
    * @return {Trie}
    */
   static fromList(elements) {
+    let store = new Store();
+
     function loop(branch, keyValues) {
       // ------------------- An empty trie
       if (keyValues.length === 0) {
@@ -104,6 +112,7 @@ export class Trie {
           prefix,
           kv.key,
           kv.value,
+          store,
         );
       }
 
@@ -137,7 +146,7 @@ export class Trie {
         }, [])))
         .map(trie => trie.isEmpty() ? undefined : trie);
 
-      return new Branch(prefix, children);
+      return new Branch(prefix, children, store);
     }
 
     return loop('', elements.map(kv => ({ ...kv, path: intoPath(kv.key) })));
@@ -157,18 +166,27 @@ export class Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   insert(key, value) {
-    return this.into(Leaf, intoPath(key), key, value);
+    return this.into(Leaf, intoPath(key), key, value, this.store);
   }
 
+
   into(target, ...args) {
+    const hash = this.hash;
+
     this.__proto__ = target.prototype;
     for (let prop in this) {
       if (this.hasOwnProperty(prop)) {
         delete this[prop];
       }
     }
-    return Object.assign(this, Reflect.construct(target, args));
+
+    const self = Object.assign(this, Reflect.construct(target, args));
+
+    this.store.delete(hash);
+
+    return self;
   }
+
 
   /** Conveniently access a child in the tries at the given path. A path is
    * sequence of nibbles, as an hex-encoded string.
@@ -205,28 +223,6 @@ export class Trie {
     throw new Error(`cannot walk empty trie with path ${path}`);
   }
 
-  /** Format a sub-trie. This is mostly used in conjunction with inspect.
-   * @private
-   */
-  format(options, body, nibble, join, vertical = ' ') {
-    const hash = !(this instanceof Leaf)
-      ? options.stylize(
-          `#${this.hash.toString('hex').slice(0, DIGEST_SUMMARY_LENGTH)}`,
-          'special',
-        )
-      : '';
-
-    return this instanceof Leaf
-      ? `\n ${join}─ ${nibble}${body}`
-      : `\n${eachLine(
-          body,
-          (s, ix) =>
-            (ix === 0
-                ? ` ${join}─ ${nibble}${this.prefix} ${hash}`
-                : ` ${vertical} `
-            ) + s
-        )}`;
-  }
 
   /** A custom function for inspecting an (empty) Trie.
    * @private
@@ -246,6 +242,9 @@ export class Trie {
  * are also the only nodes to hold values.
  */
 export class Leaf extends Trie {
+  /** @type {Store} */
+  store;
+
   /** The raw Leaf's key.
    * @type {Buffer}
    */
@@ -260,13 +259,13 @@ export class Leaf extends Trie {
    * @type {bool}
    * @private
    */
-  displayKeyAsHex
+  displayKeyAsHex;
 
   /** A flag to indicate how to display the value.
    * @type {bool}
    * @private
    */
-  displayValueAsHex
+  displayValueAsHex;
 
 
   /** Create a new {@link Leaf} from a prefix and a value.
@@ -282,9 +281,12 @@ export class Leaf extends Trie {
    * @param {Buffer|string} value
    *   A serialized value. Raw strings are treated as UTF-8 byte buffers.
    *
+   * @param {Store} store
+   *   The data-store to use for storing and retrieving the underlying trie.
+   *
    * @private
    */
-  constructor(suffix, key, value) {
+  constructor(suffix, key, value, store) {
     super();
 
     this.displayKeyAsHex = typeof key !== 'string'
@@ -302,6 +304,9 @@ export class Leaf extends Trie {
       `The suffix ${suffix} isn't a valid extension of ${this.displayKeyAsHex ? key.toString('hex') : key}`,
     );
 
+    assertInstanceOf(Store, { store });
+
+    this.store = store;
     this.size = 1;
     this.key = key;
     this.value = value;
@@ -325,7 +330,7 @@ export class Leaf extends Trie {
     // step more efficient on-chain, we append it as a raw bytestring instead of
     // an array of nibbles.
     //
-    // If the prefix's length is odd however, we do still add one nibble, and
+    // If the prefix's length is odd however, we must still prepend one nibble, and
     // then the rest.
     const isOdd = prefix.length % 2 > 0;
 
@@ -352,6 +357,7 @@ export class Leaf extends Trie {
    */
   reset() {
     this.hash = Leaf.computeHash(this.prefix, digest(this.value));
+    this.store.set(this.hash, this.serialise());
   }
 
 
@@ -386,13 +392,15 @@ export class Leaf extends Trie {
           thisPath.slice(prefix.length + 1),
           this.displayKeyAsHex ? this.key : this.key.toString(),
           this.displayValueAsHex ? this.value : this.value.toString(),
+          this.store,
         ),
         [newNibble]: new Leaf(
           newPath.slice(prefix.length + 1),
           key,
-          value
+          value,
+          this.store,
         ),
-    });
+    }, this.store);
   }
 
 
@@ -436,6 +444,12 @@ export class Leaf extends Trie {
       path === this.prefix ? this.value : undefined
     );
   }
+
+
+  // TODO
+  serialise() {
+    return this;
+  }
 }
 
 
@@ -449,6 +463,9 @@ export class Leaf extends Trie {
  *
  */
 export class Branch extends Trie {
+  /** @type {Store} */
+  store;
+
   /** A sparse array of child sub-tries.
    *
    * @type {Array<Trie|undefined>}
@@ -466,11 +483,16 @@ export class Branch extends Trie {
    *   sub-tries. When specifying a vector, there must be exactly 16 elements,
    *   with 'undefined' for empty branches.
    *
+   * @param {Store} store
+   *   The data-store to use for storing and retrieving the underlying trie.
+   *
    * @return {Branch}
    * @private
    */
-  constructor(prefix = '', children) {
+  constructor(prefix = '', children, store) {
     super();
+
+    assert(children !== undefined);
 
     children = typeof children === 'object' && children !== null && !Array.isArray(children)
       ? sparseVector(children)
@@ -486,13 +508,17 @@ export class Branch extends Trie {
     // should be.
     children.forEach((node, ix) => {
       if (node !== undefined) {
-        assertInstanceOf(Trie, { [`children[${ix}]`]: node });
+        assert(
+          node instanceof Trie,
+          `children[${ix}] must be an instance of Trie`
+        );
+
         assert(
           !node.isEmpty(),
           `Branch cannot contain empty tries; but children[${ix}] is empty.`
         );
       }
-    })
+    });
 
     // NOTE: There are special behaviours associated with tries that contains a
     // single node and this is captured as {@link Leaf}.
@@ -506,6 +532,10 @@ export class Branch extends Trie {
       'children must be a vector of *exactly 16* elements (possibly undefined)',
     );
 
+    assertInstanceOf(Store, { store });
+
+    this.store = store;
+    this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
     this.prefix = prefix;
 
@@ -530,14 +560,6 @@ export class Branch extends Trie {
   }
 
 
-  /** Recompute a branch's size and hash after modification.
-   */
-  reset() {
-    this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
-    this.size = this.children.reduce((size, child) => size + (child?.size || 0), 0);
-  }
-
-
   /**
    * Insert a new value at the given key and re-compute hashes of all nodes
    * along the path.
@@ -551,7 +573,7 @@ export class Branch extends Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   insert(key, value) {
-    const walk = (node, path, parents) => {
+    const loop = (node, path, parents) => {
       const prefix = node.prefix.length > 0
         ? commonPrefix([node.prefix, path])
         : '';
@@ -559,6 +581,8 @@ export class Branch extends Trie {
       path = path.slice(prefix.length);
 
       const thisNibble = nibble(path[0]);
+
+      node.fetchChildren();
 
       if (prefix.length < node.prefix.length) {
         const newPrefix = node.prefix.slice(prefix.length);
@@ -569,12 +593,14 @@ export class Branch extends Trie {
             path.slice(1),
             key,
             value,
+            this.store,
           ),
           [newNibble]: new Branch(
             node.prefix.slice(prefix.length + 1),
             node.children,
+            this.store,
           ),
-        });
+        }, this.store);
 
         return parents;
       }
@@ -584,17 +610,22 @@ export class Branch extends Trie {
       const child = node.children[thisNibble];
 
       if (child === undefined) {
-        node.children[thisNibble] = new Leaf(path.slice(1), key, value);
+        node.children[thisNibble] = new Leaf(path.slice(1), key, value, this.store);
         return parents;
-      } else if (child instanceof Leaf) {
+      }
+
+      if (child instanceof Leaf) {
         child.insert(key, value);
         return parents;
       } else {
-        return walk(child, path.slice(1), parents);
+        return loop(child, path.slice(1), parents);
       }
     };
 
-    walk(this, intoPath(key), []).forEach(node => node.reset());
+    loop(this, intoPath(key), []).forEach(node => {
+      node.reset();
+      node.size += 1;
+    });
   }
 
 
@@ -613,15 +644,19 @@ export class Branch extends Trie {
     path = path.slice(skip);
 
     const branch = nibble(path[0]);
-    const child = this.children[branch];
 
-    assert(
-      child !== undefined,
-      `element at remaining path ${path} not in trie: no child at branch ${branch}`,
-    );
+    return this.withChildren((children) => {
+      const child = children[branch];
 
-    return child.walk(path.slice(1)).rewind(child, skip, this.children);
+      assert(
+        child !== undefined,
+        `element at remaining path ${path} not in trie: no child at branch ${branch}`,
+      );
+
+      return child.walk(path.slice(1)).rewind(child, skip, children);
+    });
   }
+
 
   /** A custom function for inspecting a Branch, with colors and nice formatting.
    * @private
@@ -636,14 +671,38 @@ export class Branch extends Trie {
       return acc;
     }, {});
 
+    function formatHash(hash, len) {
+      return options.stylize(
+        `#${hash.toString('hex').slice(0, len ?? DIGEST_SUMMARY_LENGTH)}`,
+        'special',
+      );
+    }
+
+    function format(node, join, vertical = ' ') {
+      const nibble = branches[node.hash];
+
+      const hash = formatHash(node.hash);
+
+      if (!(node instanceof Trie)) {
+        return `\n ${join}─ ${nibble} ${hash}`;
+      }
+
+      const body = inspect(node, { ...options, depth: depth + 1 });
+
+      return node instanceof Leaf
+        ? `\n ${join}─ ${nibble}${body}`
+        : `\n${eachLine(
+            body,
+            (s, ix) =>
+              (ix === 0
+                  ? ` ${join}─ ${nibble}${node.prefix} ${hash}`
+                  : ` ${vertical} `
+              ) + s
+          )}`;
+    }
+
     // ----- First
-    let first = head.format(
-      options,
-      inspect(head, { ...options, depth: depth + 1 }),
-      branches[head.hash],
-      depth === 2 && this.prefix.length === 0 ? '┌' : '├',
-      '│'
-    );
+    let first = format(head, depth === 2 && this.prefix.length === 0 ? '┌' : '├', '│');
     if (depth === 2 && this.prefix.length > 0) {
       first = `\n ${this.prefix}${first}`
     }
@@ -651,31 +710,80 @@ export class Branch extends Trie {
     // ----- In-between
     let between = [];
     tail.slice(0, -1).forEach(node => {
-      between.push(node.format(
-        options,
-        inspect(node, { ...options, depth: depth + 1 }),
-        branches[node.hash],
-        '├',
-        '│',
-      ));
+      between.push(format(node, '├', '│'));
     })
     between = between.join('');
 
     // ----- Last
     let last = tail[tail.length - 1];
-    last = last.format(
-      options,
-      inspect(last, { ...options, depth: depth + 1 }),
-      branches[last.hash],
-      '└',
-    );
+    last = format(last, '└');
 
-    const rootHash = options.stylize(`#${this.hash.toString('hex')}`, 'special');
+    const rootHash = formatHash(this.hash, 2 * DIGEST_LENGTH);
     const wall = ''.padStart(3 + DIGEST_LENGTH * 2, '═')
 
     return depth == 2
       ? `╔${wall}╗\n║ ${rootHash} ║\n╚${wall}╝${first}${between}${last}`
       : `${first}${between}${last}`;
+  }
+
+
+  /** Recompute a branch's size and hash after modification.
+   */
+  reset() {
+    if (this.hash !== undefined) {
+      this.store.delete(this.hash);
+    }
+    this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
+    this.children = this.children.map(child => child instanceof Trie ? { hash: child.hash } : child);
+    this.store.set(this.hash, this.serialise());
+  }
+
+
+  withChildren(callback) {
+    return callback(this.children.map(child =>
+      child === undefined ? child : this.store.get(child.hash)
+    ));
+  }
+
+
+  /** Recursively fetch children and sub-children. Useful to pretty-print (part of)
+   * a Branch node
+   *
+   * @param {Number} [depth=0]
+   *   Depth until which fetch sub-children. 0 means only the current level.
+   *   Use Number.MAX_SAFE_INTEGER to fetch all the entire sub-trie.
+   *
+   * @return {Trie} This trie, with children fetched.
+   */
+  fetchChildren(depth = 0) {
+    assert(this.children.filter(node => node !== undefined).length > 1);
+
+    function loop(n, node) {
+      if (n < 0 || !(node instanceof Branch)) {
+        return node;
+      }
+
+      node.children = node.children.map(child => {
+        if (child === undefined) {
+          return undefined;
+        }
+
+        return loop(
+          n - 1,
+          child instanceof Trie ? child : node.store.get(child.hash)
+        );
+      });
+
+      return node;
+    }
+
+    return loop(depth, this);
+  }
+
+
+  // TODO
+  serialise() {
+    return this;
   }
 }
 
