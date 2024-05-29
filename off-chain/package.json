@@ -16,6 +16,7 @@
     "jsdoc": "^4.0.3"
   },
   "dependencies": {
-    "blake2b": "^2.1.4"
+    "blake2b": "^2.1.4",
+    "level": "^8.0.1"
   }
 }

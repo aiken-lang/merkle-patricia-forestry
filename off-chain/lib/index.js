@@ -78,7 +78,7 @@ export class Trie {
    * @param {Store} [store]
    *   The trie's store, default to an in-memory store if omitted.
    */
-  constructor(hash = NULL_HASH, prefix = '', size = 0, store = new Store()) {
+  constructor(store = new Store(), hash = NULL_HASH, prefix = '', size = 0) {
     assertInstanceOf(Store, { store });
 
     this.hash = hash;
@@ -321,7 +321,7 @@ export class Leaf extends Trie {
    * @private
    */
   constructor(hash, prefix, key, displayKeyAsHex, value, displayValueAsHex, store) {
-    super(hash, prefix, 1, store);
+    super(store, hash, prefix, 1);
 
     this.key = key;
     this.displayKeyAsHex = displayKeyAsHex;
@@ -568,7 +568,7 @@ export class Branch extends Trie {
   children;
 
   constructor(hash, prefix, children, size, store) {
-    super(hash, prefix, size, store);
+    super(store, hash, prefix, size);
     this.children = children;
   }
 
@@ -945,9 +945,10 @@ export class Branch extends Trie {
       hash,
       blob.prefix,
       blob.children.map(child => {
-        if (child === undefined) {
+        if (!child) {
           return undefined;
         }
+
         return { hash: Buffer.from(child, 'hex') };
       }),
       blob.size,
