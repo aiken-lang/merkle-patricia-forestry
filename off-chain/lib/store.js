@@ -5,16 +5,16 @@ export class Store {
     this.#nodes = new Map();
   }
 
-  set(key, value) {
+  async get(key) {
+    return this.#nodes.get(key.toString('hex'));
+  }
+
+  async put(key, value) {
     this.#nodes.set(key.toString('hex'), value);
   }
 
-  delete(key) {
+  async del(key) {
     this.#nodes.delete(key.toString('hex'));
-  }
-
-  get(key) {
-    return this.#nodes.get(key.toString('hex'));
   }
 
   get size() {

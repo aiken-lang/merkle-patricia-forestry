@@ -1,5 +1,6 @@
 import blake2b from 'blake2b';
 
+
 /* Size of the digest of the underlying hash algorithm.
  * @private
  */

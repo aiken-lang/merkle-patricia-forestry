@@ -280,3 +280,16 @@ export function merkleProof(nodes, me) {
 }
 
 
+/** Turn any key into a path of nibbles.
+ *
+ * @param {Buffer|string} key
+ *   Also accepts raw 'strings' treated as UTF-8 byte buffers.
+ * @return {string}
+ * @private
+ */
+export function intoPath(key) {
+  return digest(key = typeof key === 'string'
+    ? Buffer.from(key)
+    : key
+  ).toString('hex');
+}

@@ -52,13 +52,13 @@ test('Trie: inspect an empty trie', t => {
   t.is(inspect(trie), 'ø');
 });
 
-test('Trie: can construct from an empty list', t => {
-  t.deepEqual(Trie.fromList([]), new Trie());
+test('Trie: can construct from an empty list', async t => {
+  t.deepEqual(await Trie.fromList([]), new Trie());
 });
 
-test('Trie: can be constructed from a single value', t => {
+test('Trie: can be constructed from a single value', async t => {
   const pairs = [{ key: 'foo', value: 'bar' }]
-  const trie = Trie.fromList(pairs);
+  const trie = await Trie.fromList(pairs);
 
   t.true(trie instanceof Leaf);
   t.is(trie.prefix.length, 64);
@@ -66,26 +66,26 @@ test('Trie: can be constructed from a single value', t => {
   t.is(trie.value.toString(), pairs[0].value);
 });
 
-test('Trie: can be constructed from two values', t => {
+test('Trie: can be constructed from two values', async t => {
   const pairs = [
     { key: 'foo', value: '14' },
     { key: 'bar', value: '42' },
   ];
 
-  const trie = Trie.fromList(pairs);
+  const trie = await Trie.fromList(pairs);
 
   t.is(trie.size, 2);
   t.false(trie instanceof Leaf);
 
-  trie.fetchChildren();
+  await trie.fetchChildren();
 
-  const foo = trie.children[11];
+  const foo = await trie.childAt('b');
   t.true(foo instanceof Leaf);
   t.is(foo.prefix.length, 63);
   t.is(foo.key.toString(), pairs[0].key);
   t.is(foo.value.toString(), pairs[0].value);
 
-  const bar = trie.children[8];
+  const bar = await trie.childAt('8');
   t.true(bar instanceof Leaf);
   t.is(bar.prefix.length, 63);
   t.is(bar.key.toString(), pairs[1].key);
@@ -97,27 +97,28 @@ test('Trie: can be constructed from two values', t => {
 // ----------------------------------------------------------------- Trie.insert
 // -----------------------------------------------------------------------------
 
-test('Trie.insert: into empty', t => {
+test('Trie.insert: into empty', async t => {
   let trie = new Trie();
-  trie.insert('foo', '14');
+  await trie.insert('foo', '14');
   t.true(trie instanceof Leaf);
-  t.deepEqual(trie, Trie.fromList([{ key: 'foo', value: '14' }]));
+  t.deepEqual(trie, await Trie.fromList([{ key: 'foo', value: '14' }]));
 });
 
-test('Trie.insert: into leaf', t => {
+test('Trie.insert: into leaf', async t => {
   const foo = { key: 'foo', value: '14' };
   const bar = { key: 'bar', value: '42' };
 
-  let trie = Trie.fromList([foo]);
-  trie.insert(bar.key, bar.value);
+  let trie = await Trie.fromList([foo]);
+  await trie.insert(bar.key, bar.value);
   t.true(trie instanceof Branch);
 
-  t.deepEqual(trie, Trie.fromList([foo, bar]));
+  t.deepEqual(trie, await Trie.fromList([foo, bar]));
 });
 
-test('Trie.insert: arbitrary', t => {
-  const trie = new Trie();
-  shuffle(FRUITS_LIST).forEach((fruit) => trie.insert(fruit.key, fruit.value));
+test('Trie.insert: arbitrary', async t => {
+  const trie = await FRUITS_LIST.reduce(async (trie, fruit) => {
+    return (await trie).insert(fruit.key, fruit.value);
+  }, new Trie());
 
   t.false(trie.children.some(node => node !== undefined && node instanceof Trie))
   t.is(inspect(trie), unindent`
@@ -140,11 +141,13 @@ test('Trie.insert: arbitrary', t => {
      └─ f #209a78c802ca
   `);
 
-  const sameTrie = Trie.fromList(FRUITS_LIST);
+  const sameTrie = await Trie.fromList(FRUITS_LIST);
   t.deepEqual(trie, sameTrie);
 
-  trie.fetchChildren(Number.MAX_SAFE_INTEGER);
-  sameTrie.fetchChildren(Number.MAX_SAFE_INTEGER);
+  await Promise.all([
+    trie.fetchChildren(Number.MAX_SAFE_INTEGER),
+    sameTrie.fetchChildren(Number.MAX_SAFE_INTEGER),
+  ]);
   t.deepEqual(trie, sameTrie);
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
@@ -204,30 +207,30 @@ test('Trie.insert: arbitrary', t => {
 // ------------------------------------------------------------------ Trie.prove
 // -----------------------------------------------------------------------------
 
-test('Trie: can create proof for leaf-trie for existing element', t => {
-  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
-  const proof = trie.prove('foo');
+test('Trie: can create proof for leaf-trie for existing element', async t => {
+  const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
+  const proof = await trie.prove('foo');
   t.is(
     proof.verify().toString('hex'),
     trie.hash.toString('hex'),
   );
 });
 
-test('Trie: cannot create proof for leaf-trie for non-existing elements', t => {
-  const trie = Trie.fromList([{ key: 'foo', value: '14' }]);
-  const proof = trie.prove('bar');
+test('Trie: cannot create proof for leaf-trie for non-existing elements', async t => {
+  const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
+  const proof = await trie.prove('bar');
   t.throws(() => proof.verify());
 });
 
-test('Trie: can create proof for simple tries', t => {
+test('Trie: can create proof for simple tries', async t => {
   const pairs = [
     { key: 'foo', value: '14' },
     { key: 'bar', value: '42' },
   ];
 
-  const trie = Trie.fromList(pairs);
+  const trie = await Trie.fromList(pairs);
   t.is(trie.size, 2);
-  trie.fetchChildren(1);
+  await trie.fetchChildren(1);
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
     ║ #5e68dce55d03ea2ff4093cb88e6a6c5ad5fca7943800683cfebef6007787d04c ║
@@ -237,30 +240,30 @@ test('Trie: can create proof for simple tries', t => {
   `);
 
   const proofs = {
-    foo: trie.prove('foo'),
-    bar: trie.prove('bar'),
+    foo: await trie.prove('foo'),
+    bar: await trie.prove('bar'),
   };
 
   t.true(proofs.foo.verify().equals(trie.hash));
   t.true(proofs.bar.verify().equals(trie.hash));
 
-  t.throws(() => trie.prove('fo'));
-  t.throws(() => trie.prove('ba'));
-  t.throws(() => trie.prove('foobar'));
+  await t.throwsAsync(() => trie.prove('fo'));
+  await t.throwsAsync(() => trie.prove('ba'));
+  await t.throwsAsync(() => trie.prove('foobar'));
 });
 
-test('Trie: checking for membership & insertion on complex trie', t => {
-  const trie = Trie.fromList(FRUITS_LIST);
+test('Trie: checking for membership & insertion on complex trie', async t => {
+  const trie = await Trie.fromList(FRUITS_LIST);
 
   t.is(trie.size, 30);
 
-  FRUITS_LIST.forEach(fruit => {
-    const proof = trie.prove(fruit.key);
+  FRUITS_LIST.forEach(async fruit => {
+    const proof = await trie.prove(fruit.key);
 
     // Prove membership
     t.true(proof.verify(true).equals(trie.hash), fruit.key);
 
-    const trieWithout = Trie.fromList(FRUITS_LIST.filter(x => x.key !== fruit.key));
+    const trieWithout = await Trie.fromList(FRUITS_LIST.filter(x => x.key !== fruit.key));
 
     // Prove insertion
     t.true(proof.verify(false).equals(trieWithout.hash), fruit.key);

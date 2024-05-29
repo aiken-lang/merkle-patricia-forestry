@@ -6,11 +6,12 @@ import {
   assertInstanceOf,
   commonPrefix,
   eachLine,
-  sparseVector,
+  intoPath,
   merkleProof,
   merkleRoot,
   nibble,
   nibbles,
+  sparseVector,
   withEllipsis,
 } from './helpers.js'
 import { Store } from './store.js';
@@ -62,19 +63,30 @@ export class Trie {
    */
   prefix;
 
+  /** A local in-memory or on-disk store. We only keep top-level nodes in
+   * memories. Children are only fetched on request or when needed, and
+   * discarded once done.
+   *
+   * @type {Store}
+   */
   store;
+
 
   /** Construct a new empty trie. This constructor is mostly useless. See
    * {@link Trie.fromList} for instead.
    *
-   * @param {Store} store
+   * @param {Store} [store]
+   *   The trie's store, default to an in-memory store if omitted.
    */
   constructor(store = new Store()) {
+    assertInstanceOf(Store, { store });
+
     this.size = 0;
     this.hash = NULL_HASH;
     this.prefix = '';
     this.store = store;
   }
+
 
   /**
    * Test whether a trie is empty (i.e. holds no branch nodes or leaves).
@@ -84,20 +96,25 @@ export class Trie {
     return this.size == 0;
   }
 
+
   /** Recompute a node's size and hash after modification.
+   * @private
    */
-  reset() {}
+  async reset() {
+    return this;
+  }
+
 
   /**
    * Construct a Merkle-Patricia {@link Trie} from a list of key/value pairs.
    *
    * @param {Array<{key: Buffer|string, value: Buffer|string}>} pairs
-   * @return {Trie}
+   * @return {Promise<Trie>}
    */
-  static fromList(elements) {
+  static async fromList(elements) {
     let store = new Store();
 
-    function loop(branch, keyValues) {
+    async function loop(branch, keyValues) {
       // ------------------- An empty trie
       if (keyValues.length === 0) {
         return new Trie();
@@ -133,7 +150,7 @@ export class Trie {
       // NOTE(2): Because we have at least 2 values at this point, the
       // resulting Branch is guaranted to have at least 2 children. They cannot
       // be under the same branch since we have stripped their common prefix!
-      const children = Array
+      const nodes = await Promise.all(Array
         .from('0123456789abcdef')
         .map(digit => loop(digit, stripped.reduce((acc, kv) => {
           assert(kv.path[0] !== undefined, `empty path for node ${kv}`);
@@ -143,8 +160,9 @@ export class Trie {
           }
 
           return acc;
-        }, [])))
-        .map(trie => trie.isEmpty() ? undefined : trie);
+        }, []))));
+
+      const children = nodes.map(trie => trie.isEmpty() ? undefined : trie);
 
       return new Branch(prefix, children, store);
     }
@@ -165,13 +183,29 @@ export class Trie {
    *
    * @throws {AssertionError} when a value already exists at the given key.
    */
-  insert(key, value) {
-    return this.into(Leaf, intoPath(key), key, value, this.store);
+  async insert(key, value) {
+    return this.into(Leaf, intoPath(key), key, value);
   }
 
 
-  into(target, ...args) {
+  /**
+   * Mutate an instance of Trie/Branch/Leaf into another. This is typically
+   * used to upgrade empty Trie into Leaf, and Leaf into Branch. The method
+   * takes care of preserving the inheritance chain while modifying _this_
+   * appropriately.
+   *
+   * @param {function} target
+   *   A target constructor, e.g. Leaf or Branch.
+   *
+   * @param {...any} args
+   *   The arguments to provide the constructor.
+   *
+   * @return {Promise<Trie>}
+   * @private
+   */
+  async into(target, ...args) {
     const hash = this.hash;
+    const store = this.store;
 
     this.__proto__ = target.prototype;
     for (let prop in this) {
@@ -180,9 +214,12 @@ export class Trie {
       }
     }
 
-    const self = Object.assign(this, Reflect.construct(target, args));
+    const self = Object.assign(
+      this,
+      await Reflect.construct(target, args.concat(store))
+    );
 
-    this.store.delete(hash);
+    await this.store.del(hash);
 
     return self;
   }
@@ -192,34 +229,43 @@ export class Trie {
    * sequence of nibbles, as an hex-encoded string.
    *
    * @param {string} path A sequence of nibbles.
-   * @return {Trie|undefined} A sub-trie at the given path, or nothing.
+   * @return {Promise<Trie|undefined>} A sub-trie at the given path, or nothing.
    */
-  childAt(path) {
-    return Array.from(path).reduce((trie, branch) => {
-      return trie?.children[nibble(branch)];
+  async childAt(path) {
+    return Array.from(path).reduce(async (task, branch) => {
+      const trie = await task;
+      const child = trie.children[nibble(branch)];
+
+      if (child === undefined) {
+        return undefined;
+      }
+
+      return this.store.get(child.hash);
     }, this);
   }
+
 
   /**
    * Creates a proof of inclusion of a given key in the trie.
    *
    * @param {Buffer|string} key
-   * @return {Proof}
+   * @return {Promise<Proof>}
    * @throws {AssertionError} When the value is not in the trie.
    */
-  prove(key) {
+  async prove(key) {
     return this.walk(intoPath(key));
   }
+
 
   /** Walk a trie down a given path, accumulating neighboring nodes along the
    * way to build a proof.
    *
    * @param {string} path A sequence of nibbles.
-   * @return {Proof}
+   * @return {Promise<Proof>}
    * @throws {AssertionError} When there's no value at the given path in the trie.
    * @private
    */
-  walk(path) {
+  async walk(path) {
     throw new Error(`cannot walk empty trie with path ${path}`);
   }
 
@@ -242,9 +288,6 @@ export class Trie {
  * are also the only nodes to hold values.
  */
 export class Leaf extends Trie {
-  /** @type {Store} */
-  store;
-
   /** The raw Leaf's key.
    * @type {Buffer}
    */
@@ -281,13 +324,13 @@ export class Leaf extends Trie {
    * @param {Buffer|string} value
    *   A serialized value. Raw strings are treated as UTF-8 byte buffers.
    *
-   * @param {Store} store
+   * @param {Store} [store]
    *   The data-store to use for storing and retrieving the underlying trie.
    *
    * @private
    */
   constructor(suffix, key, value, store) {
-    super();
+    super(store);
 
     this.displayKeyAsHex = typeof key !== 'string'
     key = typeof key === 'string' ? Buffer.from(key) : key;
@@ -304,15 +347,12 @@ export class Leaf extends Trie {
       `The suffix ${suffix} isn't a valid extension of ${this.displayKeyAsHex ? key.toString('hex') : key}`,
     );
 
-    assertInstanceOf(Store, { store });
-
-    this.store = store;
     this.size = 1;
     this.key = key;
     this.value = value;
     this.prefix = suffix;
 
-    this.reset();
+    return this.reset();
   }
 
 
@@ -354,10 +394,14 @@ export class Leaf extends Trie {
 
 
   /** Recompute the leaf's hash after modification.
+   *
+   * @return {Promise<Trie>}
+   * @private
    */
-  reset() {
+  async reset() {
     this.hash = Leaf.computeHash(this.prefix, digest(this.value));
-    this.store.set(this.hash, this.serialise());
+    await this.store.put(this.hash, this.serialise());
+    return this;
   }
 
 
@@ -371,9 +415,12 @@ export class Leaf extends Trie {
    * @param {Buffer|string} value
    *   The value to insert. Strings are treated as UTF-8 byte buffers.
    *
+   * @returns {Promise<Trie>}
+   *   The modified trie, eventually.
+   *
    * @throws {AssertionError} when a value already exists at the given key.
    */
-  insert(key, value) {
+  async insert(key, value) {
     assert(this.key !== key, 'already in trie');
     assert(this.prefix.length > 0);
 
@@ -388,19 +435,19 @@ export class Leaf extends Trie {
     const newNibble = nibble(newPath[prefix.length]);
 
     return this.into(Branch, prefix, {
-        [thisNibble]: new Leaf(
+        [thisNibble]: await new Leaf(
           thisPath.slice(prefix.length + 1),
           this.displayKeyAsHex ? this.key : this.key.toString(),
           this.displayValueAsHex ? this.value : this.value.toString(),
           this.store,
         ),
-        [newNibble]: new Leaf(
+        [newNibble]: await new Leaf(
           newPath.slice(prefix.length + 1),
           key,
           value,
           this.store,
         ),
-    }, this.store);
+    });
   }
 
 
@@ -438,7 +485,7 @@ export class Leaf extends Trie {
   /** See {@link Trie.walk}
    * @private
    */
-  walk(path) {
+  async walk(path) {
     return new Proof(
       intoPath(this.key),
       path === this.prefix ? this.value : undefined
@@ -463,9 +510,6 @@ export class Leaf extends Trie {
  *
  */
 export class Branch extends Trie {
-  /** @type {Store} */
-  store;
-
   /** A sparse array of child sub-tries.
    *
    * @type {Array<Trie|undefined>}
@@ -483,14 +527,14 @@ export class Branch extends Trie {
    *   sub-tries. When specifying a vector, there must be exactly 16 elements,
    *   with 'undefined' for empty branches.
    *
-   * @param {Store} store
+   * @param {Store} [store]
    *   The data-store to use for storing and retrieving the underlying trie.
    *
    * @return {Branch}
    * @private
    */
   constructor(prefix = '', children, store) {
-    super();
+    super(store);
 
     assert(children !== undefined);
 
@@ -532,14 +576,11 @@ export class Branch extends Trie {
       'children must be a vector of *exactly 16* elements (possibly undefined)',
     );
 
-    assertInstanceOf(Store, { store });
-
-    this.store = store;
     this.size = children.reduce((size, child) => size + (child?.size || 0), 0);
     this.children = children;
     this.prefix = prefix;
 
-    this.reset();
+    return this.reset();
   }
 
   /** Set the prefix on a branch, and computes its corresponding hash. Both steps
@@ -570,10 +611,13 @@ export class Branch extends Trie {
    * @param {Buffer|string} value
    *   The value to insert. Strings are treated as UTF-8 byte buffers.
    *
+   * @returns {Promise<Trie>}
+   *   The modified trie, eventually.
+   *
    * @throws {AssertionError} when a value already exists at the given key.
    */
-  insert(key, value) {
-    const loop = (node, path, parents) => {
+  async insert(key, value) {
+    const loop = async (node, path, parents) => {
       const prefix = node.prefix.length > 0
         ? commonPrefix([node.prefix, path])
         : '';
@@ -582,25 +626,25 @@ export class Branch extends Trie {
 
       const thisNibble = nibble(path[0]);
 
-      node.fetchChildren();
+      await node.fetchChildren();
 
       if (prefix.length < node.prefix.length) {
         const newPrefix = node.prefix.slice(prefix.length);
         const newNibble = nibble(newPrefix[0]);
 
-        node.into(Branch, prefix, {
-          [thisNibble]: new Leaf(
+        await node.into(Branch, prefix, {
+          [thisNibble]: await new Leaf(
             path.slice(1),
             key,
             value,
             this.store,
           ),
-          [newNibble]: new Branch(
+          [newNibble]: await new Branch(
             node.prefix.slice(prefix.length + 1),
             node.children,
             this.store,
           ),
-        }, this.store);
+        });
 
         return parents;
       }
@@ -610,22 +654,30 @@ export class Branch extends Trie {
       const child = node.children[thisNibble];
 
       if (child === undefined) {
-        node.children[thisNibble] = new Leaf(path.slice(1), key, value, this.store);
+        node.children[thisNibble] = await new Leaf(
+          path.slice(1),
+          key,
+          value,
+          this.store
+        );
         return parents;
       }
 
       if (child instanceof Leaf) {
-        child.insert(key, value);
+        await child.insert(key, value);
         return parents;
       } else {
         return loop(child, path.slice(1), parents);
       }
     };
 
-    loop(this, intoPath(key), []).forEach(node => {
-      node.reset();
+    const parents = await loop(this, intoPath(key), []);
+    await Promise.all(parents.map(async (node) => {
+      await node.reset();
       node.size += 1;
-    });
+    }));
+
+    return this;
   }
 
 
@@ -633,7 +685,7 @@ export class Branch extends Trie {
    * See {@link Trie.walk}
    * @private
    */
-  walk(path) {
+  async walk(path) {
     assert(
       path.startsWith(this.prefix),
       `element at remaining path ${path} not in trie: non-matching prefix ${this.prefix}`,
@@ -645,7 +697,7 @@ export class Branch extends Trie {
 
     const branch = nibble(path[0]);
 
-    return this.withChildren((children) => {
+    return this.withChildren(async (children) => {
       const child = children[branch];
 
       assert(
@@ -653,7 +705,9 @@ export class Branch extends Trie {
         `element at remaining path ${path} not in trie: no child at branch ${branch}`,
       );
 
-      return child.walk(path.slice(1)).rewind(child, skip, children);
+      const proof = await child.walk(path.slice(1));
+
+      return proof.rewind(child, skip, children);
     });
   }
 
@@ -727,22 +781,42 @@ export class Branch extends Trie {
   }
 
 
-  /** Recompute a branch's size and hash after modification.
+  /** Recompute a branch's size and hash after modification; also collapses
+   * all children back to hashes.
+   *
+   * @return {Promise<Branch>} This current object, eventually modified.
+   * @private
    */
-  reset() {
+  async reset() {
+    // TODO: delete & set should really be happening in the same batch / transaction
     if (this.hash !== undefined) {
-      this.store.delete(this.hash);
+      await this.store.del(this.hash);
     }
+
     this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
-    this.children = this.children.map(child => child instanceof Trie ? { hash: child.hash } : child);
-    this.store.set(this.hash, this.serialise());
+    this.children = this.children.map(child => child instanceof Trie
+      ? { hash: child.hash }
+      : child
+    );
+
+    await this.store.put(this.hash, this.serialise());
+
+    return this;
   }
 
 
-  withChildren(callback) {
-    return callback(this.children.map(child =>
-      child === undefined ? child : this.store.get(child.hash)
-    ));
+  /** Perform an operation with the node's children, without keeping them
+   * around once done.
+   *
+   * @param {async function} callback
+   * @return {Promise<any>}
+   * @private
+   */
+  async withChildren(callback) {
+    return callback(await Promise.all(this.children.map(child => child === undefined
+      ? child
+      : this.store.get(child.hash)
+    )));
   }
 
 
@@ -755,24 +829,24 @@ export class Branch extends Trie {
    *
    * @return {Trie} This trie, with children fetched.
    */
-  fetchChildren(depth = 0) {
+  async fetchChildren(depth = 0) {
     assert(this.children.filter(node => node !== undefined).length > 1);
 
-    function loop(n, node) {
+    async function loop(n, node) {
       if (n < 0 || !(node instanceof Branch)) {
         return node;
       }
 
-      node.children = node.children.map(child => {
+      node.children = await Promise.all(node.children.map(async child => {
         if (child === undefined) {
           return undefined;
         }
 
         return loop(
           n - 1,
-          child instanceof Trie ? child : node.store.get(child.hash)
+          child instanceof Trie ? child : await node.store.get(child.hash)
         );
-      });
+      }));
 
       return node;
     }
@@ -1097,23 +1171,4 @@ export class Proof {
   toCBOR() {
     throw new Error('toCBOR: TODO');
   }
-}
-
-
-// -----------------------------------------------------------------------------
-// --------------------------------------------------------------------- Helpers
-// -----------------------------------------------------------------------------
-
-/** Turn any key into a path of nibbles.
- *
- * @param {Buffer|string} key
- *   Also accepts raw 'strings' treated as UTF-8 byte buffers.
- * @return {string}
- * @private
- */
-function intoPath(key) {
-  return digest(key = typeof key === 'string'
-    ? Buffer.from(key)
-    : key
-  ).toString('hex');
 }
