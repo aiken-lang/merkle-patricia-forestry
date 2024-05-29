@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import * as buffer from 'node:buffer';
 import { inspect } from 'node:util';
 import { DIGEST_LENGTH, digest } from './crypto.js'
 import {
@@ -315,30 +316,14 @@ export class Leaf extends Trie {
    */
   value;
 
-  /** A flag to indicate how to display the key.
-   * @type {bool}
-   * @private
-   */
-  displayKeyAsHex;
-
-  /** A flag to indicate how to display the value.
-   * @type {bool}
-   * @private
-   */
-  displayValueAsHex;
-
-
   /** Create a new {@link Leaf} from a prefix and a value.
    * @private
    */
-  constructor(hash, prefix, key, displayKeyAsHex, value, displayValueAsHex, store) {
+  constructor(hash, prefix, key, value, store) {
     super(store, hash, prefix, 1);
 
     this.key = key;
-    this.displayKeyAsHex = displayKeyAsHex;
-
     this.value = value;
-    this.displayValueAsHex = displayValueAsHex;
   }
 
   /**
@@ -359,11 +344,9 @@ export class Leaf extends Trie {
    * @return {Promise<Leaf>}
    */
   static async from(suffix, key, value, store) {
-    const displayKeyAsHex = typeof key !== 'string'
     key = typeof key === 'string' ? Buffer.from(key) : key;
     assertInstanceOf(Buffer, { key });
 
-    const displayValueAsHex = typeof value !== 'string'
     value = typeof value === 'string' ? Buffer.from(value) : value;
     assertInstanceOf(Buffer, { value });
 
@@ -371,16 +354,14 @@ export class Leaf extends Trie {
 
     assert(
       digest(key).toString('hex').endsWith(suffix),
-      `The suffix ${suffix} isn't a valid extension of ${displayKeyAsHex ? key.toString('hex') : key}`,
+      `The suffix ${suffix} isn't a valid extension of ${key.toString('hex')}`,
     );
 
     const leaf = new Leaf(
       Leaf.computeHash(suffix, digest(value)),
       suffix,
       key,
-      displayKeyAsHex,
       value,
-      displayValueAsHex,
       store
     );
 
@@ -467,8 +448,8 @@ export class Leaf extends Trie {
     return this.into(Branch, prefix, {
         [thisNibble]: await Leaf.from(
           thisPath.slice(prefix.length + 1),
-          this.displayKeyAsHex ? this.key : this.key.toString(),
-          this.displayValueAsHex ? this.value : this.value.toString(),
+          this.key,
+          this.value,
           this.store,
         ),
         [newNibble]: await Leaf.from(
@@ -496,15 +477,15 @@ export class Leaf extends Trie {
 
     const prefix = withEllipsis(this.prefix, PREFIX_CUTOFF, options);
 
-    const key = options.stylize(this.displayKeyAsHex
-      ? this.key.toString('hex')
-      : this.key,
+    const key = options.stylize(buffer.isUtf8(this.key)
+      ? this.key.toString()
+      : this.key.toString('hex').slice(0, DIGEST_SUMMARY_LENGTH),
       'boolean'
     );
 
-    const value = options.stylize(this.displayValueAsHex
-      ? this.value.toString('hex')
-      : this.value,
+    const value = options.stylize(buffer.isUtf8(this.value)
+      ? this.value.toString()
+      : this.value.toString('hex').slice(0, DIGEST_SUMMARY_LENGTH),
       'string'
     );
 
@@ -534,8 +515,6 @@ export class Leaf extends Trie {
       prefix: this.prefix,
       key: this.key.toString('hex'),
       value: this.value.toString('hex'),
-      displayKeyAsHex: this.displayKeyAsHex,
-      displayValueAsHex: this.displayValueAsHex,
     };
   }
 
@@ -553,9 +532,7 @@ export class Leaf extends Trie {
       hash,
       blob.prefix,
       Buffer.from(blob.key, 'hex'),
-      blob.displayKeyAsHex,
       Buffer.from(blob.value, 'hex'),
-      blob.displayValueAsHex,
       store,
     );
   }
