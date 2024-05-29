@@ -128,56 +128,56 @@ test('Trie.load', async t => {
 
   await Trie.fromList(FRUITS_LIST, store);
 
-  const root = Buffer.from("ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd", 'hex');
+  const root = Buffer.from("4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078", 'hex');
 
   const trie = await Trie.load(root, store);
 
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
+    ║ #4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078 ║
     ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 0 #a8b499ebb15a
-     ├─ 1 #ea27de91b695
-     ├─ 2 #33df330965d7
-     ├─ 3 #5a5985680607
-     ├─ 4 #8187d8a3f1cf
-     ├─ 5 #630f527d86d1
-     ├─ 7 #84301478aa70
-     ├─ 8 #a3721b3311f1
-     ├─ a #a13acbf54844
-     ├─ b #ed869762c74c
-     ├─ c #d653df9bae61
-     ├─ d #17d9adcb708f
-     ├─ e #5f1fd0952856
-     └─ f #209a78c802ca
+     ┌─ 0 #520a7f805c5f
+     ├─ 1 #58c5e4a29601
+     ├─ 2 #c9431d708d20
+     ├─ 3 #070a12b8b349
+     ├─ 4 #79519b8cdfbd
+     ├─ 5 #08434fd717ae
+     ├─ 7 #aeb3a9f2e198
+     ├─ 8 #b27d20a5187a
+     ├─ a #c2f2115774c1
+     ├─ b #da0bdb30bf45
+     ├─ c #a22a7b4d767a
+     ├─ d #0a747d583e2e
+     ├─ e #da1771d107c8
+     └─ f #117abf0e19fb
   `);
 });
 
 test('Trie.insert: arbitrary', async t => {
   await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
-    const trie = await FRUITS_LIST.reduce(async (trie, fruit) => {
+    const trie = await shuffle(FRUITS_LIST).reduce(async (trie, fruit) => {
       return (await trie).insert(fruit.key, fruit.value);
     }, new Trie(store));
 
     t.false(trie.children.some(node => node !== undefined && node instanceof Trie))
     t.is(inspect(trie), unindent`
       ╔═══════════════════════════════════════════════════════════════════╗
-      ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
+      ║ #4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078 ║
       ╚═══════════════════════════════════════════════════════════════════╝
-       ┌─ 0 #a8b499ebb15a
-       ├─ 1 #ea27de91b695
-       ├─ 2 #33df330965d7
-       ├─ 3 #5a5985680607
-       ├─ 4 #8187d8a3f1cf
-       ├─ 5 #630f527d86d1
-       ├─ 7 #84301478aa70
-       ├─ 8 #a3721b3311f1
-       ├─ a #a13acbf54844
-       ├─ b #ed869762c74c
-       ├─ c #d653df9bae61
-       ├─ d #17d9adcb708f
-       ├─ e #5f1fd0952856
-       └─ f #209a78c802ca
+       ┌─ 0 #520a7f805c5f
+       ├─ 1 #58c5e4a29601
+       ├─ 2 #c9431d708d20
+       ├─ 3 #070a12b8b349
+       ├─ 4 #79519b8cdfbd
+       ├─ 5 #08434fd717ae
+       ├─ 7 #aeb3a9f2e198
+       ├─ 8 #b27d20a5187a
+       ├─ a #c2f2115774c1
+       ├─ b #da0bdb30bf45
+       ├─ c #a22a7b4d767a
+       ├─ d #0a747d583e2e
+       ├─ e #da1771d107c8
+       └─ f #117abf0e19fb
     `);
 
     const sameTrie = await Trie.fromList(FRUITS_LIST);
@@ -190,52 +190,52 @@ test('Trie.insert: arbitrary', async t => {
     t.deepEqual(trie, sameTrie);
     t.is(inspect(trie), unindent`
       ╔═══════════════════════════════════════════════════════════════════╗
-      ║ #ee57de5169e7be3f32ce7a486e8816c808d7751e7df0a27ab576bf18ef1afbdd ║
+      ║ #4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078 ║
       ╚═══════════════════════════════════════════════════════════════════╝
-       ┌─ 0 #a8b499ebb15a
-       │  ├─ 389fd..[54 digits]..1abc #96d6ae0847f4 { mango[uid: 0] → 🥭 }
-       │  └─ 9d230..[54 digits]..9ecc #48071b791174 { lemon[uid: 0] → 🍋 }
-       ├─ 16a4 #ea27de91b695
-       │  ├─ 3a30b..[51 digits]..a968 #2da4e1ef108c { cherry[uid: 0] → 🍒 }
-       │  ├─ 8584c..[51 digits]..d4a5 #4c83b85745f7 { tomato[uid: 83468] → 🍅 }
-       │  └─ b7ce0..[51 digits]..f157 #522f6b664982 { plum[uid: 15492] → 🤷 }
-       ├─ 245 #33df330965d7
-       │  ├─ 4c787..[52 digits]..c20e #0f6146c21bf4 { pineapple[uid: 12577] → 🍍 }
-       │  ├─ a4f81..[52 digits]..90a3 #4796c959657c { pomegranate[uid: 0] → 🤷 }
-       │  └─ e3fc8..[52 digits]..e7c3 #f50a2aad6560 { strawberry[uid: 2532] → 🍓 }
-       ├─ 3e #5a5985680607
-       │  ├─ d002d..[53 digits]..f3ac #dbf6004ed27d { lime[uid: 0] → 🤷 }
-       │  └─ e659e..[53 digits]..b3b9 #83f30b498ad4 { banana[uid: 218] → 🍌 }
-       ├─ 4 #8187d8a3f1cf
-       │  ├─ 07 #4790f8833717
-       │  │  ├─ 6d8ab..[52 digits]..73ef #561a4637b19a { guava[uid: 344] → 🤷 }
-       │  │  └─ c5847..[52 digits]..4a22 #f285ef1fbb7f { kiwi[uid: 0] → 🥝 }
-       │  └─ a522f..[54 digits]..20cd #c6473b214164 { kumquat[uid: 0] → 🤷 }
-       ├─ 5 #630f527d86d1
-       │  ├─ cddcd..[54 digits]..aa9e #ebe7d10d20a2 { watermelon[uid: 0] → 🍉 }
-       │  └─ e #9b87e6b900b4
-       │     ├─ 7ccfe..[53 digits]..4440 #2b33ecc11e12 { yuzu[uid: 0] → 🤷 }
-       │     └─ d71f9..[53 digits]..26d2 #bd6f8f57f1c1 { apple[uid: 58] → 🍎 }
-       ├─ 78666..[55 digits]..7292 #84301478aa70 { raspberry[uid: 0] → 🤷 }
-       ├─ 8af48..[55 digits]..04a8 #a3721b3311f1 { tangerine[uid: 11] → 🍊 }
-       ├─ a #a13acbf54844
-       │  ├─ 4b927..[54 digits]..3c69 #96e92f4f2632 { peach[uid: 0] → 🍑 }
-       │  └─ f12 #de6db29c4829
-       │     ├─ a1017..[51 digits]..50e7 #89756ed0f250 { fig[uid: 68267] → 🤷 }
-       │     └─ ec412..[51 digits]..71fe #51ae27cca144 { passionfruit[uid: 0] → 🤷 }
-       ├─ b #ed869762c74c
-       │  ├─ 67e71..[54 digits]..c48b #c2e5213cceec { grapefruit[uid: 0] → 🤷 }
-       │  └─ 88701..[54 digits]..949e #64f57b688d7b { blueberry[uid: 0] → 🫐 }
-       ├─ c #d653df9bae61
-       │  ├─ 5dc3c..[54 digits]..a3f3 #0f186942cf0d { cranberry[uid: 0] → 🤷 }
-       │  └─ 8cac1..[54 digits]..c3ca #4bb4b456122b { orange[uid: 0] → 🍊 }
-       ├─ d #17d9adcb708f
-       │  ├─ b3047..[54 digits]..502a #e6c8d47be96a { coconut[uid: 0] → 🥥 }
-       │  └─ f779e..[54 digits]..678a #9f8acb081242 { pear[uid: 0] → 🍐 }
-       ├─ e5993..[55 digits]..c9ec #5f1fd0952856 { apricot[uid: 0] → 🤷 }
-       └─ f #209a78c802ca
-          ├─ 63c88..[54 digits]..21ca #da480b0fea67 { papaya[uid: 0] → 🤷 }
-          └─ b69c0..[54 digits]..2145 #88850a4e3205 { grapes[uid: 0] → 🍇 }
+       ┌─ 0 #520a7f805c5f
+       │  ├─ 389fd..[54 digits]..1abc #56408b9882f8 { mango[uid: 0] → 🥭 }
+       │  └─ 9d230..[54 digits]..9ecc #9ca49c0d73d5 { lemon[uid: 0] → 🍋 }
+       ├─ 16a4 #58c5e4a29601
+       │  ├─ 3a30b..[51 digits]..a968 #86410153344f { cherry[uid: 0] → 🍒 }
+       │  ├─ 8584c..[51 digits]..d4a5 #cda1c8929d05 { tomato[uid: 83468] → 🍅 }
+       │  └─ b7ce0..[51 digits]..f157 #472d5ccbcae8 { plum[uid: 15492] → 🤷 }
+       ├─ 245 #c9431d708d20
+       │  ├─ 4c787..[52 digits]..c20e #e38b422bd7d9 { pineapple[uid: 12577] → 🍍 }
+       │  ├─ a4f81..[52 digits]..90a3 #3e2491668264 { pomegranate[uid: 0] → 🤷 }
+       │  └─ e3fc8..[52 digits]..e7c3 #eda213c9a1ca { strawberry[uid: 2532] → 🍓 }
+       ├─ 3e #070a12b8b349
+       │  ├─ d002d..[53 digits]..f3ac #b40093af0024 { lime[uid: 0] → 🤷 }
+       │  └─ e659e..[53 digits]..b3b9 #242b464043b4 { banana[uid: 218] → 🍌 }
+       ├─ 4 #79519b8cdfbd
+       │  ├─ 07 #fdd60cf1b755
+       │  │  ├─ 6d8ab..[52 digits]..73ef #c538c893306a { guava[uid: 344] → 🤷 }
+       │  │  └─ c5847..[52 digits]..4a22 #785e20425cf9 { kiwi[uid: 0] → 🥝 }
+       │  └─ a522f..[54 digits]..20cd #e0b9d1f525e3 { kumquat[uid: 0] → 🤷 }
+       ├─ 5 #08434fd717ae
+       │  ├─ cddcd..[54 digits]..aa9e #8a1256a87426 { watermelon[uid: 0] → 🍉 }
+       │  └─ e #e26d8409cd76
+       │     ├─ 7ccfe..[53 digits]..4440 #c387ec2e54f6 { yuzu[uid: 0] → 🤷 }
+       │     └─ d71f9..[53 digits]..26d2 #cfcc9c732f50 { apple[uid: 58] → 🍎 }
+       ├─ 78666..[55 digits]..7292 #aeb3a9f2e198 { raspberry[uid: 0] → 🤷 }
+       ├─ 8af48..[55 digits]..04a8 #b27d20a5187a { tangerine[uid: 11] → 🍊 }
+       ├─ a #c2f2115774c1
+       │  ├─ 4b927..[54 digits]..3c69 #a6a35d200876 { peach[uid: 0] → 🍑 }
+       │  └─ f12 #8ee8d620e9d6
+       │     ├─ a1017..[51 digits]..50e7 #a241f4660aa4 { fig[uid: 68267] → 🤷 }
+       │     └─ ec412..[51 digits]..71fe #63c036b16617 { passionfruit[uid: 0] → 🤷 }
+       ├─ b #da0bdb30bf45
+       │  ├─ 67e71..[54 digits]..c48b #f39b1b5089f8 { grapefruit[uid: 0] → 🤷 }
+       │  └─ 88701..[54 digits]..949e #85acec96ac0f { blueberry[uid: 0] → 🫐 }
+       ├─ c #a22a7b4d767a
+       │  ├─ 5dc3c..[54 digits]..a3f3 #4c51531ac9d9 { cranberry[uid: 0] → 🤷 }
+       │  └─ 8cac1..[54 digits]..c3ca #8e27b4cf47de { orange[uid: 0] → 🍊 }
+       ├─ d #0a747d583e2e
+       │  ├─ b3047..[54 digits]..502a #54d9ea3b162d { coconut[uid: 0] → 🥥 }
+       │  └─ f779e..[54 digits]..678a #a82bdd8e07c2 { pear[uid: 0] → 🍐 }
+       ├─ e5993..[55 digits]..c9ec #da1771d107c8 { apricot[uid: 0] → 🤷 }
+       └─ f #117abf0e19fb
+          ├─ 63c88..[54 digits]..21ca #62bda6837164 { papaya[uid: 0] → 🤷 }
+          └─ b69c0..[54 digits]..2145 #c8e795f7b215 { grapes[uid: 0] → 🍇 }
     `);
 
     t.is(await trie.store.size(), 45);
@@ -273,10 +273,10 @@ test('Trie: can create proof for simple tries', async t => {
   await trie.fetchChildren(1);
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
-    ║ #5e68dce55d03ea2ff4093cb88e6a6c5ad5fca7943800683cfebef6007787d04c ║
+    ║ #69509862d51b65b26be6e56d3286d2ff00a0e8091d004721f4d2ce6918325c18 ║
     ╚═══════════════════════════════════════════════════════════════════╝
-     ┌─ 84418..[55 digits]..e71d #96eed322c80b { bar → 42 }
-     └─ b8fe9..[55 digits]..49fd #6fbcdcf84771 { foo → 14 }
+     ┌─ 84418..[55 digits]..e71d #b310552e86bf { bar → 42 }
+     └─ b8fe9..[55 digits]..49fd #95bb7f919c90 { foo → 14 }
   `);
 
   const proofs = {

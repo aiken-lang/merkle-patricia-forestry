@@ -387,8 +387,8 @@ export class Leaf extends Trie {
     const isOdd = prefix.length % 2 > 0;
 
     const head = isOdd
-      ? nibbles(prefix.slice(0, 1))
-      : Buffer.from([]);
+      ? Buffer.concat([Buffer.from([0x00]), nibbles(prefix.slice(0, 1))])
+      : Buffer.from([0xFF]);
 
     const tail = Buffer.from(isOdd
       ? prefix.slice(1)

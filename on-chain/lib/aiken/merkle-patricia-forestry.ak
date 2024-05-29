@@ -487,20 +487,22 @@ fn sparse_merkle_4(
 fn suffix(path, cursor) {
   if cursor % 2 == 0 {
     bytearray.drop(path, cursor / 2)
+      |> bytearray.push(0xff)
   } else {
-    nibble(path, cursor)
-      |> bytearray.push(bytearray.drop(path, ( cursor + 1 ) / 2), _)
+    bytearray.drop(path, ( cursor + 1 ) / 2)
+      |> bytearray.push(nibble(path, cursor))
+      |> bytearray.push(0)
   }
 }
 
 test examples_suffix() {
   and {
-    suffix(#"abcd456789", 0) == #"abcd456789",
-    suffix(#"abcd456789", 1) == #"0bcd456789",
-    suffix(#"abcd456789", 2) == #"cd456789",
-    suffix(#"abcd456789", 4) == #"456789",
-    suffix(#"abcd456789", 5) == #"056789",
-    suffix(#"abcd456789", 10) == #"",
+    suffix(#"abcd456789", 0) == #"ffabcd456789",
+    suffix(#"abcd456789", 1) == #"000bcd456789",
+    suffix(#"abcd456789", 2) == #"ffcd456789",
+    suffix(#"abcd456789", 4) == #"ff456789",
+    suffix(#"abcd456789", 5) == #"00056789",
+    suffix(#"abcd456789", 10) == #"ff",
   }
 }
 
