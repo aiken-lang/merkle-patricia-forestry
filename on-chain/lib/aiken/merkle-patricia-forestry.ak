@@ -1,3 +1,35 @@
+//// A Merkle Patricia Forestry (MPF) is a key:value structure which stores
+//// elements in a radix trie folowing a key, and where nodes also contains a
+//// cryptographic hash digest of the sub-trie or value they hold.
+////
+//// This library enforces (through hashing) that we use trie of radix 16
+//// (hexadecimal alphabet). This means that each level in the trie has up to
+//// 16 branches.
+////
+//// An MPF allows for checking membership, insertion and deletion in the trie
+//// using only root hashes and a succinct proofs. They are quite efficient in
+//// both cpu and mem units. And they also provide proofs that are a / lot smaller
+//// than traditional Merkle Patricia Trie; proofs remain however the / main
+//// limiting factor.
+////
+//// Here's a little table that summarizes the average proof's sizes in bytes
+//// given a number of elements.
+////
+//// We also consider the average memory and CPU execution units for verifying
+//// a proof for various sizes. Note that [`insert`](#insert) and
+//// [`delete`](#delete) require **two** proofs verifications.
+////
+//// size | avg proof size | avg proof mem | avg proof cpu |
+//// ---: | -------------: | ------------: | ------------: |
+////  10² |          250   | 70K           | 28M           |
+////  10³ |          350   | 100K          | 42M           |
+////  10⁴ |          460   | 130K          | 56M           |
+////  10⁵ |          560   | 160K          | 70M           |
+////  10⁶ |          670   | 190K          | 84M           |
+////  10⁷ |          780   | 220K          | 98M           |
+////  10⁸ |          880   | 250K          | 112M          |
+////  10⁹ |          990   | 280K          | 126M          |
+
 use aiken/builtin.{blake2b_256, index_bytearray, slice_bytearray}
 use aiken/bytearray
 use aiken/fuzz.{both, int_between, list_between}
@@ -32,33 +64,15 @@ const null_hash_8 =
 // ------------------------------------------------------ Merkle Patricia Forest
 // -----------------------------------------------------------------------------
 
-/// A Merkle Patricia Forestry (MPF) is a key:value structure which stores
-/// elements in a radix trie folowing a key, and where nodes also contains a
-/// cryptographic hash digest of the sub-trie or value they hold.
+/// A Merkle Patricia Forestry, typically constructed from a root hash digest
+/// using [`from_root`](#from_root).
 ///
-/// This library enforces (through hashing) that we use trie of radix 16
-/// (hexadecimal alphabet). This means that each level in the trie has up to
-/// 16 branches.
-///
-/// An MPF allows for checking membership, non-membership, insertion and deletion
-/// in the trie using only root hashes and a succinct proofs. They are quite
-/// efficient in both cpu and mem units. And they also provide proofs that are a
-/// lot smaller than traditional Merkle Patricia Trie; proofs remain however the
-/// main limiting factor.
-///
-/// Here's a little table that summarizes the average and max (with an
-/// _overwhelming probability_) proof's sizes in bytes given a number of elements.
-///
-/// size | avg proof size | max proof size
-/// ---: | -------------: | --------------:
-///  10² |          245   |            800
-///  10³ |          351   |           1184
-///  10⁴ |          457   |           1440
-///  10⁵ |          564   |           1824
-///  10⁶ |          670   |           2080
-///  10⁷ |          776   |           2464
-///  10⁸ |          882   |           2720
-///  10⁹ |          989   |           3104
+/// ```aiken
+/// let trie =
+///   mpf.from_root(
+///     #"225a4599b804ba53745538c83bfa699ecf8077201b61484c91171f5910a4a8f9",
+///   )
+/// ```
 pub opaque type MerklePatriciaForestry {
   root: ByteArray,
 }
@@ -87,8 +101,10 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
 }
 
 /// Test whether an element is present in the trie with a specific value. This
-/// requires a proof of inclusion for the element. The latter can be obtained
-/// off-chain from the whole trie containing the element.
+/// requires a [Proof](#Proof) of inclusion for the element. The latter can be
+/// obtained off-chain from the whole trie containing the element.
+///
+/// Returns `False` when the element isn't in the tree.
 pub fn has(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -98,8 +114,15 @@ pub fn has(
   including(key, value, proof) == self.root
 }
 
-/// Insert an element in the trie. This requires a proof of inclusion for the element.
-/// The latter can be obtained off-chain from the whole trie containing the element.
+/// **fails** when | the [Proof](#Proof) is invalid
+/// ---            | ---
+///
+/// **fails** when | there's already an element in the trie at the given key
+/// ---            | ---
+///
+/// Insert an element in the trie. This requires a [Proof](#Proof) of inclusion
+/// for the element. The latter can be obtained off-chain from the whole trie
+/// containing the element.
 pub fn insert(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -110,8 +133,15 @@ pub fn insert(
   MerklePatriciaForestry { root: including(key, value, proof) }
 }
 
-/// Remove an element from the trie. This requires a proof of inclusion for the element.
-/// The latter can be obtained off-chain from the whole trie containing the element.
+/// **fails** when | the [Proof](#Proof) is invalid
+/// ---            | ---
+///
+/// **fails** when | there's already an element in the trie at the given key
+/// ---            | ---
+///
+/// Remove an element from the trie. This requires a [Proof](#Proof) of
+/// inclusion for the element. The latter can be obtained off-chain from the
+/// whole trie containing the element.
 pub fn delete(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -126,15 +156,107 @@ pub fn delete(
 // ----------------------------------------------------------------------- Proof
 // -----------------------------------------------------------------------------
 
+/// A Proof is a list of [Step](#Step) which is processed from left to right,
+/// which corresponds to the neighbor nodes along the _path_ to the element being
+/// proved.
+///
+/// The _path_ is given by the hash digest (`blake2b-256`) of the key in
+/// hexadecimal form where each hexadecimal digit forms a branching point.
+///
+/// The leftmost item in the proof corresponds the highest level of the trie,
+/// and the rightmost corresponds to the last branching path in the trie.
+///
+/// For example, let's consider the following trie:
+///
+/// <pre>
+/// ┌─ 7
+/// │  ├─ 1 ─────── 🍑
+/// │  └─ e
+/// │     ├─ 4 ──── 🍉
+/// │     └─ a ──── 🍌
+/// ├─ a ───────── 🍎
+/// └─ f ───────── 🥝
+/// </pre>
+///
+/// - Proving 🍎 requires a single step:
+///   - The hashes of the sub-tries at path `7` and `f`.
+///
+/// - Proving 🍌 requires 3 steps:
+///   - On the 1st level, the hashes of the sub-tries at path `a` and `f`;
+///   - On the 2nd level, The hash of the sub-trie at path `1`;
+///   - On the 3rd level, The hash of the sub-trie/leaf at path `4`;
 pub type Proof =
   List<ProofStep>
 
+/// We distinguish three kind of proof steps: Branch, Fork and Leaf. Each step
+/// contains a `skip` value which corresponds to the length of the common prefix
+/// at that particular level.
+///
+/// Since the prefix is a portion of the path (itself obtained by hashing the
+/// key), we need not to provide the whole prefix. The length is sufficient to
+/// recover it.
+///
+/// Note also that the `Fork` and `Leaf` steps may seem like an optimization
+/// when looking only at the proof from an inclusion perspective; but they are
+/// actually necessary steps to verify insertion and deletion proofs (which
+/// verifies the proof from an exclusion standpoint, and thus require the full
+/// neighbor when there's only one).
 pub type ProofStep {
+
+  /// The most common case encountered for every level that has 3+ nodes
+  /// (or 2+ neighbors depending how you look at it). The `neighbors` array
+  /// is an array of `4 * 32 = 130` bytes which corresponds to 4 hash digests.
+  ///
+  /// These 4 digests are in reality a Merkle proof of a tiny binary
+  /// Sparse-Merkle Tree of size 16 corresponding to all the nodes at that
+  /// branch arranged according to their nibble (`0` leftmost, `f` rightmost).
+  ///
+  /// - The first 32 bytes of the `neighbors` array is the root hash of the
+  ///   top-most neighbor sub-tree containing 8 nodes.
+  ///
+  /// - The last 32 bytes of the `neighbors` array is the direct neighbor of
+  ///   the node if any, or a null hash (32 times `0` bits).
+  ///
+  /// To recover the hash of a `Branch` level, we must compute the following:
+  ///
+  /// ```aiken
+  /// blake2b_256(prefix | sparse_merkle_root([node, ...neighbors]))
+  /// ```
+  ///
+  /// where `sparse_merkle_root` denotes the Merkle root hash obtained from
+  /// arranging the 16 nodes by their nibbles as described, using null hashes for
+  /// absent neighbors.
   Branch { skip: Int, neighbors: ByteArray }
+
+  /// A `Fork` is a special `Branch` case where there's only one neighbor which
+  /// is not a `Leaf`.
+  ///
+  /// The step contains the full neighbor's preimage, as well as the nibble at
+  /// which it sits. From thre, we can recover the hash of a `Fork` level by
+  /// computing:
+  ///
+  /// ```aiken
+  /// blake2b_256(prefix | sparse_merkle_root([node, blake2b_256(neighbor.prefix | neighbor.root)]))
+  /// ```
+  ///
+  /// The `neighbor.nibble` indicates the location of the neighbor in the
+  /// Sparse Merkle Tree, whereas the one from the node being proved is given by
+  /// its path at that particular location.
   Fork { skip: Int, neighbor: Neighbor }
+
+  /// A `Leaf` is a special `Branch` case where there's only one neighbor
+  /// which is a leaf of the trie.
+  ///
+  /// The `key` and `value` corresponds to the **hash digests** of the
+  /// neighbor's key and value respectively. Note that while we provide the full
+  /// key, the proof only truly requires a suffix of the key up to the moment it
+  /// separates from the node's path. The first bits of the keys are thus
+  /// usually ignored and are only kept to make the proof more convenient to
+  /// generate.
   Leaf { skip: Int, key: ByteArray, value: ByteArray }
 }
 
+/// A neighbor node used in a proof. See [ProofStep](#ProofStep) for details.
 pub type Neighbor {
   nibble: Int,
   prefix: ByteArray,
@@ -503,6 +625,17 @@ test examples_suffix() {
     suffix(#"abcd456789", 4) == #"ff456789",
     suffix(#"abcd456789", 5) == #"00056789",
     suffix(#"abcd456789", 10) == #"ff",
+  }
+}
+
+test prop_suffix_prefix(params via both(fuzz.bytearray(), int_between(0, 31))) {
+  let str = suffix(params.1st, params.2nd)
+  let head = index_bytearray(str, 0)
+
+  if head == 0 {
+    index_bytearray(str, 1) < 16
+  } else {
+    head == 255
   }
 }
 
