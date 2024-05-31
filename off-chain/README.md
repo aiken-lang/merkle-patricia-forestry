@@ -1,6 +1,6 @@
 # Merkle Patricia Forestry
 
-This module provides a Node.js backend for working with an authenticated key/value store: a.k.a [Merkle Patricia Forestry](../README.md). It comes with an out-of-the-box on-disk storage solution based on [level.js](https://leveljs.org/), but also have an in-memory store available for debugging.
+This package provides a Node.js backend for working with an authenticated key/value store: a.k.a [Merkle Patricia Forestry](../README.md). It comes with an out-of-the-box on-disk storage solution based on [level.js](https://leveljs.org/), but also have an in-memory store available for debugging.
 
 The library provides way of constructing the trie incrementally (by inserting items into it) while keeping a low memory footprint. By default, only the top-most node is kept in memory and children are only references to nodes stored on-disk.
 
