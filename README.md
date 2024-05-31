@@ -48,15 +48,9 @@ See [on-chain](./on-chain) for usage.
 
 ## Performances
 
-This library implements few optimizations.
+This library implements few optimizations. We borrow ideas from the [Ethereum's Modified Merkle Patricia Trie (MPT)](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie/) and also introduce a novel approach for organizing nodes as tiny [Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) that result in much smaller proof sizes, and gives the name to the structure: Merkle Patricia Forestry. This optimization and overall approach are covered in more details [in the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis).
 
-1. First, like [Ethereum's Modified Merkle Patricia Trie (MPT)](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie/), we avoid creating intermediate sparse nodes with only one child by introducing explicit prefixes to each node. Yet we go further than Ethereum's MPTs by merging _extension_ nodes into other types. Thus providing only two types of nodes: branches and leaves (as well as the empty trie, as a special case). This optimization is explained in more details [in the wiki: Optimization #1](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Optimization-%231:-Removing-Sparse-Nodes).
-
-2. Second, compared to standard MPTs, we reduce the size of the proofs by a large factor by representing child nodes in branch as little [Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) of 16 elements. Hence the name, _forestry_. This allows to provide a sub-proof of a fixed size for each proof level instead of all neighboring nodes. Thus, despite being of radix 16, we recover optimal proof sizes that would correspond to tries of radix 2. This optimization is explained in more details [in the wiki: Optimization #2](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Optimization-%232:-Proof-of-neighborhood).
-
-While the first optimization drastically reduce computation power needed to verify proofs, the second sacrifices it in order to reduce the proof's size. Overall, the library ends up with a good trade-off between execution units and proof size which is summarized in the table below for various trie sizes.
-
-Note that the numbers in the table correspond to _one proof verification_ (e.g. membership). Insertion and deletion in the trie both require _two proof verifications_; so double the numbers!
+While this optimization sacrifices some memory and cpu execution units in favor of smaller proof sizes, the library ends up with a good trade-off overall. The table below summarizes the proof size, memory units and cpu units for various sizes of tries. Note that the numbers in the table correspond to _one proof verification_ (e.g. membership). Insertion and deletion in the trie both require _two proof verifications_; so double the numbers!
 
 trie size | avg proof size (bytes) | avg proof mem units | avg proof cpu units |
 ---:      | -------------:         | ------------:       | ------------:       |
