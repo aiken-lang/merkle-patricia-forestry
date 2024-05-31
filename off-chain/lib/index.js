@@ -439,11 +439,18 @@ export class Leaf extends Trie {
 
     const newPath = intoPath(key).slice(-thisPath.length);
 
+    assert(
+      thisPath !== newPath,
+      `element already in the trie at ${key}`
+    );
+
     const prefix = commonPrefix([thisPath, newPath]);
 
     const thisNibble = nibble(thisPath[prefix.length]);
 
     const newNibble = nibble(newPath[prefix.length]);
+
+    assert(thisNibble !== newNibble);
 
     return this.into(Branch, prefix, {
         [thisNibble]: await Leaf.from(
@@ -665,70 +672,70 @@ export class Branch extends Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   async insert(key, value) {
-    this.store.beginBatch();
+    await this.store.batch(async () => {
+      const loop = async (node, path, parents) => {
+        const prefix = node.prefix.length > 0
+          ? commonPrefix([node.prefix, path])
+          : '';
 
-    const loop = async (node, path, parents) => {
-      const prefix = node.prefix.length > 0
-        ? commonPrefix([node.prefix, path])
-        : '';
+        path = path.slice(prefix.length);
 
-      path = path.slice(prefix.length);
+        const thisNibble = nibble(path[0]);
 
-      const thisNibble = nibble(path[0]);
+        await node.fetchChildren();
 
-      await node.fetchChildren();
+        if (prefix.length < node.prefix.length) {
+          const newPrefix = node.prefix.slice(prefix.length);
+          const newNibble = nibble(newPrefix[0]);
 
-      if (prefix.length < node.prefix.length) {
-        const newPrefix = node.prefix.slice(prefix.length);
-        const newNibble = nibble(newPrefix[0]);
+          assert(thisNibble !== newNibble);
 
-        await node.into(Branch, prefix, {
-          [thisNibble]: await Leaf.from(
+          await node.into(Branch, prefix, {
+            [thisNibble]: await Leaf.from(
+              path.slice(1),
+              key,
+              value,
+              this.store,
+            ),
+            [newNibble]: await Branch.from(
+              node.prefix.slice(prefix.length + 1),
+              node.children,
+              this.store,
+            ),
+          });
+
+          return parents;
+        }
+
+        parents.unshift(node);
+
+        const child = node.children[thisNibble];
+
+        if (child === undefined) {
+          node.children[thisNibble] = await Leaf.from(
             path.slice(1),
             key,
             value,
-            this.store,
-          ),
-          [newNibble]: await Branch.from(
-            node.prefix.slice(prefix.length + 1),
-            node.children,
-            this.store,
-          ),
-        });
+            this.store
+          );
+          return parents;
+        }
 
-        return parents;
-      }
+        if (child instanceof Leaf) {
+          await child.insert(key, value);
+          return parents;
+        } else {
+          return loop(child, path.slice(1), parents);
+        }
+      };
 
-      parents.unshift(node);
+      const parents = await loop(this, intoPath(key), []);
 
-      const child = node.children[thisNibble];
-
-      if (child === undefined) {
-        node.children[thisNibble] = await Leaf.from(
-          path.slice(1),
-          key,
-          value,
-          this.store
-        );
-        return parents;
-      }
-
-      if (child instanceof Leaf) {
-        await child.insert(key, value);
-        return parents;
-      } else {
-        return loop(child, path.slice(1), parents);
-      }
-    };
-
-    const parents = await loop(this, intoPath(key), []);
-
-    await Promise.all(parents.map(async (node) => {
-      node.size += 1;
-      await node.save(node.hash);
-    }));
-
-    await this.store.commitBatch();
+      await Promise.all(parents.map(async (node) => {
+        node.size += 1;
+        await node.save(node.hash);
+      }));
+    });
 
     return this;
   }

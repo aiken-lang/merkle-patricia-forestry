@@ -243,6 +243,23 @@ test('Trie.insert: arbitrary', async t => {
 });
 
 
+test('Trie.insert: already inserted', async t => {
+  const trie = await Trie.fromList(FRUITS_LIST);
+
+  await FRUITS_LIST.reduce(async (task, fruit) => {
+    await task;
+    return t.throwsAsync(
+      () => trie.insert(fruit.key, '🤷'),
+      { message(e) { return e.startsWith('element already in the trie') } },
+      fruit.key,
+    );
+  }, Promise.resolve());
+
+  const sameTrie = await Trie.fromList(FRUITS_LIST);
+
+  t.deepEqual(await trie.save(), sameTrie);
+});
+
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------ Trie.prove
 // -----------------------------------------------------------------------------

@@ -17,12 +17,18 @@ export class Store {
     return this.#db.open ? this.#db.open() : Promise.resolve();
   }
 
-  beginBatch() {
+  async batch(callback) {
     assert(this.#batch === undefined, 'batch already ongoing');
-    this.#batch = [];
-  }
 
-  async commitBatch() {
+    this.#batch = [];
+
+    try {
+      await callback();
+    } catch (e) {
+      this.#batch = undefined;
+      throw e;
+    }
+
     await this.#db.batch(this.#batch);
     this.#batch = undefined;
   }
