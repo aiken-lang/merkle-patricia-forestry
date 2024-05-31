@@ -160,103 +160,21 @@ pub fn delete(
 /// which corresponds to the neighbor nodes along the _path_ to the element being
 /// proved.
 ///
-/// The _path_ is given by the hash digest (`blake2b-256`) of the key in
-/// hexadecimal form where each hexadecimal digit forms a branching point.
-///
-/// The leftmost item in the proof corresponds the highest level of the trie,
-/// and the rightmost corresponds to the last branching path in the trie.
-///
-/// For example, let's consider the following trie:
-///
-/// <pre>
-/// ┌─ 7
-/// │  ├─ 1 ─────── 🍑
-/// │  └─ e
-/// │     ├─ 4 ──── 🍉
-/// │     └─ a ──── 🍌
-/// ├─ a ───────── 🍎
-/// └─ f ───────── 🥝
-/// </pre>
-///
-/// - Proving 🍎 requires a single step:
-///   - The hashes of the sub-tries at path `7` and `f`.
-///
-/// - Proving 🍌 requires 3 steps:
-///   - On the 1st level, the hashes of the sub-tries at path `a` and `f`;
-///   - On the 2nd level, The hash of the sub-trie at path `1`;
-///   - On the 3rd level, The hash of the sub-trie/leaf at path `4`;
+/// See [merkle-patricia-forestry/off-chain :: Proving](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#proving)
+/// for details about generating a proof.
 pub type Proof =
   List<ProofStep>
 
 /// We distinguish three kind of proof steps: Branch, Fork and Leaf. Each step
 /// contains a `skip` value which corresponds to the length of the common prefix
 /// at that particular level.
-///
-/// Since the prefix is a portion of the path (itself obtained by hashing the
-/// key), we need not to provide the whole prefix. The length is sufficient to
-/// recover it.
-///
-/// Note also that the `Fork` and `Leaf` steps may seem like an optimization
-/// when looking only at the proof from an inclusion perspective; but they are
-/// actually necessary steps to verify insertion and deletion proofs (which
-/// verifies the proof from an exclusion standpoint, and thus require the full
-/// neighbor when there's only one).
 pub type ProofStep {
-
-  /// The most common case encountered for every level that has 3+ nodes
-  /// (or 2+ neighbors depending how you look at it). The `neighbors` array
-  /// is an array of `4 * 32 = 130` bytes which corresponds to 4 hash digests.
-  ///
-  /// These 4 digests are in reality a Merkle proof of a tiny binary
-  /// Sparse-Merkle Tree of size 16 corresponding to all the nodes at that
-  /// branch arranged according to their nibble (`0` leftmost, `f` rightmost).
-  ///
-  /// - The first 32 bytes of the `neighbors` array is the root hash of the
-  ///   top-most neighbor sub-tree containing 8 nodes.
-  ///
-  /// - The last 32 bytes of the `neighbors` array is the direct neighbor of
-  ///   the node if any, or a null hash (32 times `0` bits).
-  ///
-  /// To recover the hash of a `Branch` level, we must compute the following:
-  ///
-  /// ```aiken
-  /// blake2b_256(prefix | sparse_merkle_root([node, ...neighbors]))
-  /// ```
-  ///
-  /// where `sparse_merkle_root` denotes the Merkle root hash obtained from
-  /// arranging the 16 nodes by their nibbles as described, using null hashes for
-  /// absent neighbors.
   Branch { skip: Int, neighbors: ByteArray }
-
-  /// A `Fork` is a special `Branch` case where there's only one neighbor which
-  /// is not a `Leaf`.
-  ///
-  /// The step contains the full neighbor's preimage, as well as the nibble at
-  /// which it sits. From thre, we can recover the hash of a `Fork` level by
-  /// computing:
-  ///
-  /// ```aiken
-  /// blake2b_256(prefix | sparse_merkle_root([node, blake2b_256(neighbor.prefix | neighbor.root)]))
-  /// ```
-  ///
-  /// The `neighbor.nibble` indicates the location of the neighbor in the
-  /// Sparse Merkle Tree, whereas the one from the node being proved is given by
-  /// its path at that particular location.
   Fork { skip: Int, neighbor: Neighbor }
-
-  /// A `Leaf` is a special `Branch` case where there's only one neighbor
-  /// which is a leaf of the trie.
-  ///
-  /// The `key` and `value` corresponds to the **hash digests** of the
-  /// neighbor's key and value respectively. Note that while we provide the full
-  /// key, the proof only truly requires a suffix of the key up to the moment it
-  /// separates from the node's path. The first bits of the keys are thus
-  /// usually ignored and are only kept to make the proof more convenient to
-  /// generate.
   Leaf { skip: Int, key: ByteArray, value: ByteArray }
 }
 
-/// A neighbor node used in a proof. See [ProofStep](#ProofStep) for details.
+/// A neighbor node used in a proof. See [Proof](#Proof) for details.
 pub type Neighbor {
   nibble: Int,
   prefix: ByteArray,
