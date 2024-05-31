@@ -6,7 +6,7 @@ import { inspect } from 'node:util';
 import test from 'ava';
 
 import { Store } from '../lib/store.js';
-import { Leaf, Branch, Proof, Trie } from '../lib/index.js';
+import { Leaf, Branch, Proof, Trie } from '../lib/trie.js';
 import * as helpers from '../lib/helpers.js';
 
 
@@ -128,9 +128,7 @@ test('Trie.load', async t => {
 
   await Trie.fromList(FRUITS_LIST, store);
 
-  const root = Buffer.from("4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078", 'hex');
-
-  const trie = await Trie.load(root, store);
+  const trie = await Trie.load(store);
 
   t.is(inspect(trie), unindent`
     ╔═══════════════════════════════════════════════════════════════════╗
@@ -238,7 +236,7 @@ test('Trie.insert: arbitrary', async t => {
           └─ b69c0..[54 digits]..2145 #c8e795f7b215 { grapes[uid: 0] → 🍇 }
     `);
 
-    t.is(await trie.store.size(), 45);
+    t.is(await trie.store.size(), 46); // 45 nodes + the root index
   }));
 });
 
