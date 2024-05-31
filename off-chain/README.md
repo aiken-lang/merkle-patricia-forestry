@@ -135,7 +135,7 @@ console.log(trie);
 
 > [!TIP]
 >
-> To retrieve the entire trie, simply pass `Number.MAX_SAFE_INTEGER`. But be careful for large tries may not fit in memory!
+> To retrieve the entire trie, use `Number.MAX_SAFE_INTEGER`. But be careful for large tries may not fit in memory!
 
 #### `trie.save(): Promise<(Trie)>`
 
