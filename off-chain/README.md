@@ -111,7 +111,7 @@ For leaves, the remaining path (a.k.a suffix) is shown but truncated for brievet
 Finally, the function is synchronous, and thus doesn't have access to children beyond
 their hashes. You can, however, fetch more children using:
 
-#### `trie.fetchChildren(depth?: number): Promise<()>`
+#### `trie.fetchChildren(depth?: number = 0): Promise<()>`
 
 The `depth` parameter is optional and must be a positive integer when provided. It corresponds to the number of sub-levels to fetch.
 
@@ -153,6 +153,10 @@ console.log(trie);
 //  ├─ 3 #ac9d183ca637
 //  └─ 9 #75eba4e4dae1
 ```
+
+> [!NOTE]
+>
+> There's in principle no need to _manually save_ the trie otherwise. Operations on the trie such as _insert_ or _delete_ automatically modifies the store.
 
 ### Accessing
 
@@ -254,6 +258,15 @@ proofTangerine.toJSON();
 // ]
 ```
 
+#### `proof.toCBOR(): Buffer`
+
+JSON is cool, but proofs are ultimately meant to be passed on-chain as redeemer or datum. We thus provide a `.toCBOR` as well to serialise a proof into a format compatible with the on-chain expectations.
+
+```js
+proofTangerine.toCBOR().toString('hex');
+// 9fd8799f005f58404be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbefa63eb4576001d8658219f928172eccb5448b4d7d62cd6d95228e13ebcbd53505840c1e96bcc431893eef34e03989814375d439faa592edf75c9e5dc10b3c30766700000000000000000000000000000000000000000000000000000000000000000ffffff
+```
+
 #### `proof.toAiken(): string`
 
 For convenience, you can also generate Aiken code that works with the on-chain part of the library using `.toAiken`.
@@ -268,7 +281,3 @@ proofTangerine.toAiken();
 // f964a20b1639c189d1e8704b78a09" },
 // ]
 ```
-
-#### `proof.toCBOR(): Buffer`
-
-TODO. Maybe.

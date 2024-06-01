@@ -324,12 +324,13 @@ test('Trie: checking for membership & insertion on complex trie', async t => {
     t.true(proof.verify(false).equals(trieWithout.hash), fruit.key);
 
     // For (re-)generating Aiken code for proofs.
-    //
-    // const fruitName = fruit.key.split("[")[0];
-    // console.log(`// ---------- ${fruitName}\n`);
-    // console.log(`const ${fruitName} = "${fruit.key}"`);
-    // console.log(`fn proof_${fruitName}() {\n${proof.toAiken()}\n}\n`);
-    // console.log(`fn without_${fruitName}() {\n  mpf.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
+
+    const fruitName = fruit.key.split("[")[0];
+    console.log(`// ---------- ${fruitName}\n`);
+    console.log(`const ${fruitName} = "${fruit.key}"`);
+    console.log(`fn proof_${fruitName}() {\n${proof.toAiken()}\n}\n`);
+    console.log(`const ${fruitName}_serialised = "${proof.toCBOR().toString('hex')}"`);
+    console.log(`fn without_${fruitName}() {\n  mpf.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
   });
 });
 

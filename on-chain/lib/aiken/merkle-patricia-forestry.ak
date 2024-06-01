@@ -168,6 +168,8 @@ pub type Proof =
 /// We distinguish three kind of proof steps: Branch, Fork and Leaf. Each step
 /// contains a `skip` value which corresponds to the length of the common prefix
 /// at that particular level.
+///
+/// The details of each level is documented [in the wiki :: Proof Format](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Proof-format).
 pub type ProofStep {
   Branch { skip: Int, neighbors: ByteArray }
   Fork { skip: Int, neighbor: Neighbor }

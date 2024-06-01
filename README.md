@@ -15,7 +15,7 @@
 
 ## Overview
 
-A Merkle Patricia Trie is a persistent & authenticated data-structure to map between arbitrary keys and values. It's like a hashmap on steroids which isn't temperable with. The item are represented in a space-optimized trie (a.k.a prefix tree) of radix 16. The path to values in the trie is given by the hash digest of their keys.
+A Merkle Patricia Trie is a persistent & authenticated data-structure to map between arbitrary keys and values. It's like a hashmap on steroids which isn't temperable with. The item are represented in a space-optimized trie (a.k.a prefix tree) of radix 16. The path to values in the trie is given by the hash digest of their keys. For more details, read [the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis).
 
 The use-cases are numerous such as maintaining large on-chain registries (e.g. domains), or providing unreasonably large oracled datasets of intrinsic data (e.g. a map of delegators/delegatee) or extrinsic data (e.g. GitHub data pertaining to an ecosystem of projects). It's also perfectly suited for long-running datasets which grow at a _slow_ rate (e.g. another blockchain).
 
@@ -49,7 +49,7 @@ See [on-chain](./on-chain) for usage.
 
 ## Performances
 
-This library implements few optimizations. We borrow ideas from the [Ethereum's Modified Merkle Patricia Trie (MPT)](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie/) and also introduce a novel approach for organizing nodes as tiny [Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) that result in much smaller proof sizes, and gives the name to the structure: Merkle Patricia Forestry. This optimization and overall approach are covered in more details [in the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis).
+This library implements few optimizations. We borrow ideas from the [Ethereum's Modified Merkle Patricia Trie (MPT)](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie/) and also introduce a novel approach for organizing nodes as tiny [Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) that result in much smaller proof sizes, and gives the name to the structure: Merkle Patricia Forestry. This optimization and overall approach are covered in more details [in the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis#forestry).
 
 While this optimization sacrifices some memory and cpu execution units in favor of smaller proof sizes, the library ends up with a good trade-off overall. The table below summarizes the proof size, memory units and cpu units for various sizes of tries. Note that the numbers in the table correspond to _one proof verification_ (e.g. membership). Insertion and deletion in the trie both require _two proof verifications_; so double the numbers!
 

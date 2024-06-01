@@ -1,3 +1,4 @@
+use aiken/cbor
 use aiken/fuzz
 use aiken/list
 use aiken/merkle_patricia_forestry.{
@@ -367,6 +368,23 @@ test example_insert_mutate_proof_apple(
   let proof = proof_apple() |> mutate(mutation)
   let root = mpf.insert(without_apple(), apple, "🍎", proof)
   root == root
+}
+
+// -------------------- Serialisation (comparing with off-chain)
+
+test serialise_apricot() {
+  let bytes = cbor.serialise(proof_apricot())
+  bytes == #"9fd8799f005f58404be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbe280ada5ef30d55433934bbc73c89d550ee916f62822c34645e04bb66540c120f5840965c07fa815b86794e8703cee7e8f626c88d7da639258d2466aae67d5d041c5a117abf0e19fb78e0535891d82e5ece1310a1cf11674587dbba304c395769a988ffffff"
+}
+
+test serialise_peach() {
+  let bytes = cbor.serialise(proof_peach())
+  bytes == #"9fd8799f005f58404be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbefa63eb4576001d8658219f928172eccb5448b4d7d62cd6d95228e13ebcbd53505840be527bcfc7febe3c560057d97f4190bd24b537a322315f84daafab3ada562b50da0bdb30bf45c76153418a634f1bcecba8c601ca985fbca14b57582920d82acbffffd87a9f00d8799f0f42010258202f6b320212dd98c38a7cd074886d942d9577cdad5ef1c72d32a01df1a63ed88fffffff"
+}
+
+test serialise_fig() {
+  let bytes = cbor.serialise(proof_fig())
+  bytes == #"9fd8799f005f58404be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbefa63eb4576001d8658219f928172eccb5448b4d7d62cd6d95228e13ebcbd53505840be527bcfc7febe3c560057d97f4190bd24b537a322315f84daafab3ada562b50da0bdb30bf45c76153418a634f1bcecba8c601ca985fbca14b57582920d82acbffffd87b9f005820a4b927e3735c7dbf9f1846844aad53e82362e47e32223d559333f4d154483c6958205ee6f548bba6d9da3313a23b395efb48b440063a592d8592e73d87b79d1d887affd87b9f025820af12ec41241cb0a5cae2a4a1232a64f3ca68f65342cf2a2f98cd6a00cf7971fe58207c3715aba2db74d565a6ce6cc72f20d9cb4652ddb29efe6268be15b105e40911ffff"
 }
 
 // -------------------- Fruits

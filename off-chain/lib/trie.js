@@ -16,6 +16,7 @@ import {
   withEllipsis,
 } from './helpers.js'
 import { Store } from './store.js';
+import * as cbor from './cbor.js';
 
 
 // -----------------------------------------------------------------------------
@@ -1283,6 +1284,60 @@ export class Proof {
   }
 
 
+  /** Serialise the proof as a portable CBOR, ready to be decoded on-chain.
+   *
+   * @return {Buffer}
+   */
+  toCBOR() {
+    return cbor.sequence(
+      cbor.beginList(),
+      ...this.toJSON().map(step => {
+        switch (step.type) {
+          case Proof.#TYPE_BRANCH.description: {
+            return cbor.tag(121, cbor.sequence(
+              cbor.beginList(),
+              cbor.int(step.skip),
+              cbor.sequence(
+                cbor.beginBytes(),
+                cbor.bytes(Buffer.from(step.neighbors.slice(0, 128), 'hex')),
+                cbor.bytes(Buffer.from(step.neighbors.slice(128), 'hex')),
+                cbor.end(),
+              ),
+              cbor.end(),
+            ));
+          }
+          case Proof.#TYPE_FORK.description: {
+            return cbor.tag(122, cbor.sequence(
+              cbor.beginList(),
+              cbor.int(step.skip),
+              cbor.tag(121, cbor.sequence(
+                cbor.beginList(),
+                cbor.int(step.neighbor.nibble),
+                cbor.bytes(Buffer.from(step.neighbor.prefix, 'hex')),
+                cbor.bytes(Buffer.from(step.neighbor.root, 'hex')),
+                cbor.end(),
+              )),
+              cbor.end(),
+            ));
+          }
+          case Proof.#TYPE_LEAF.description: {
+            return cbor.tag(123, cbor.sequence(
+              cbor.beginList(),
+              cbor.int(step.skip),
+              cbor.bytes(Buffer.from(step.neighbor.key, 'hex')),
+              cbor.bytes(Buffer.from(step.neighbor.value, 'hex')),
+              cbor.end(),
+            ));
+          }
+          default:
+            throw new Error(`unknown step type ${step.type}`);
+        }
+      }),
+      cbor.end(),
+    );
+  }
+
+
   /** Serialise the proof as Aiken code. Mainly for debugging / testing.
    *
    * @return {string}
@@ -1306,9 +1361,5 @@ export class Proof {
     });
 
     return `[\n${steps.join('')}]`;
-  }
-
-  toCBOR() {
-    throw new Error('toCBOR: TODO');
   }
 }
