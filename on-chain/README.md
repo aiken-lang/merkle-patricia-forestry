@@ -60,4 +60,5 @@ fn proof_bitcoin_845602() -> Proof {
 }
 ```
 
-The proofs themselves have been generated from a trie built with the [off-chain package](../off-chain). While theoretically possible, the Aiken library doesn't contain any primitives for constructing tries _on-chain_, even for debugging.
+> [!WARNING]
+> The proofs themselves have been generated from a trie built with the [off-chain package](../off-chain). While theoretically possible, the Aiken library doesn't contain any primitives for constructing tries _on-chain_, even for debugging.

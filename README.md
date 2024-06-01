@@ -37,7 +37,7 @@ of any key/value item in a large (billions) store.
 yarn add @aiken-lang/merkle-patricia-forestry
 ```
 
-See [off-chain](./off-chain) for usage.
+See [off-chain](./off-chain#readme) for usage.
 
 ### On-chain (Aiken)
 
@@ -45,7 +45,7 @@ See [off-chain](./off-chain) for usage.
 aiken use aiken-lang/merkle-patricia-forestry --version 1.0.0
 ```
 
-See [on-chain](./on-chain) for usage.
+See [on-chain](./on-chain#readme) for usage.
 
 ## Performances
 
