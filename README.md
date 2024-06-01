@@ -7,6 +7,7 @@
   <hr/>
 
 [![Licence](https://img.shields.io/github/license/aiken-lang/merkle-patricia-forestry?style=for-the-badge)](https://github.com/aiken-lang/merkle-patricia-forestry/blob/main/LICENSE)
+[![Continuous Integration](https://img.shields.io/github/actions/workflow/status/aiken-lang/merkle-patricia-forestry/continuous-integration.yml?style=for-the-badge&label=continuous%20integration)](https://github.com/aiken-lang/merkle-patricia-forestry/actions/workflows/continuous-integration.yml)
 [![NPM](https://img.shields.io/npm/v/%40aiken-lang%2Fmerkle-patricia-forestry?style=for-the-badge)](https://www.npmjs.com/package/@aiken-lang/merkle-patricia-forestry)
 
   <hr/>
