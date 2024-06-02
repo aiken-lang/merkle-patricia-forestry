@@ -1,11 +1,21 @@
 {
-  "name": "merkle-patricia-forestry",
+  "name": "@aiken-lang/merkle-patricia-forestry",
   "version": "1.0.0",
   "private": false,
-  "type": "module",
-  "main": "index.mjs",
   "repository": "https://github.com/aiken-lang/merkle-patricia-forestry.git ",
   "author": "KtorZ <matthias.benkort@gmail.com>",
+  "description": "A library for working with Merkle Patricia Tries on Cardano.",
+  "keywords": [
+    "merkle tree",
+    "merkle patricia trie",
+    "sparse merkle tree",
+    "patricia trie",
+    "level",
+    "aiken",
+    "cardano"
+  ],
+  "type": "module",
+  "main": "lib/index.mjs",
   "license": "MPL-2.0",
   "scripts": {
     "test": "ava",

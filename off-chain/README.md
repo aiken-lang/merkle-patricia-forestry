@@ -1,10 +1,10 @@
 # Merkle Patricia Forestry
 
-This package provides a Node.js backend for working with an authenticated key/value store: a.k.a [Merkle Patricia Forestry](../README.md). It comes with an out-of-the-box on-disk storage solution based on [level.js](https://leveljs.org/), but also have an in-memory store available for debugging.
+This package provides a Node.js backend for working with an authenticated key/value store, a.k.a [Merkle Patricia Forestry](../README.md). It comes with an out-of-the-box on-disk storage solution based on [level.js](https://leveljs.org/), but it also has an in-memory store available for debugging.
 
-The library provides way of constructing the trie incrementally (by inserting items into it) while keeping a low memory footprint. By default, only the top-most node is kept in memory and children are only references to nodes stored on-disk.
+The library provides ways of constructing the trie incrementally (by inserting items into it) while keeping a low memory footprint. By default, only the topmost node is kept in memory, and children are only references to nodes stored on disk.
 
-This package also allows to produce succinct proofs for items, thus allowing proving membership, insertion and deletion of items in the trie only from root hashes (and proofs!).
+This package also allows producing succinct proofs for items, thus allowing the proof of membership, insertion, and deletion of items in the trie only from root hashes (and proofs!).
 
 ## Installation
 
@@ -18,12 +18,12 @@ yarn add @aiken-lang/merkle-patricia-forestry
 
 #### `new Trie(store?: Store): Trie`
 
-You can construct a new trie using `new Trie`, providing an (optional) store as a parameter. It is strongly recommended to use an on-disk store for any non-trivial trie so only omit this argument for dummy tries.
+You can construct a new trie using `new Trie`, providing an (optional) store as a parameter. Using an on-disk store for non-trivial tries is strongly recommended, so only omit this argument for dummy scenarios.
 
 ```js
 import { Store, Trie } from '@aiken-lang/merkle-patricia-forestry';
 
-// Construct a new trie with an on-disk storage under the filepath 'db'.
+// Construct a new trie with on-disk storage under the file path 'db'.
 const trie = new Trie(new Store('db'));
 ```
 
@@ -31,7 +31,7 @@ const trie = new Trie(new Store('db'));
 
 > With `Item = { key: string|Buffer, value: string|Buffer }`
 
-You can rapidly bootstrap a new trie from many items using `Trie.fromList`. This is convenient for small tries and for rapid prototyping. The store is optional, and default to in-memory when omitted.
+Using `Trie. fromList`, you can rapidly bootstrap a new trie from many items. This method is convenient for small tries and rapid prototyping. The store is optional and defaults to in-memory when omitted.
 
 ```js
 const trie = await Trie.fromList([
@@ -46,9 +46,9 @@ const trie = await Trie.fromList([
 
 #### `trie.insert(key: string|Buffer, value: string|Buffer) -> Promise<Trie>`
 
-While `Trie.fromList` provide a convenient way to create small tries, mainly for testing purposes; the main ways of constructing tries is by repeatedly calling `.insert` for each item to insert. . Returns the same reference to the trie as a Promise, for convenience.
+While `Trie.fromList` provides a convenient way to create small tries, mainly for testing purposes, the primary way of constructing tries is by repeatedly calling `.insert` for each item to insert. It returns the same reference to the trie as a Promise for convenience.
 
-Note that you can only insert one item at the time, so make sure to `await` promises before attempting a new insert. Not doing so will trigger an exception. An exception is also raised when trying to insert an item at a key that is already known. Delete first!
+Note that you can only insert one item at a time, so make sure to `await` promises before attempting a new insert. Not doing so will trigger an exception. An exception is also raised when trying to insert an item at an already-known key. Delete first!
 
 ```js
 // Insert items one-by-one
@@ -80,7 +80,7 @@ await items.reduce(async (trie, { key, value }) => {
 
 #### `trie.remove(key: string|Buffer) -> Promise<Trie>`
 
-Similarly, the reverse operation `remove` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. Returns the same reference to the trie as a Promise, for convenience.
+Similarly, the reverse operation `remove` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. For convenience, it returns the same reference to the trie as a Promise.
 
 ```js
 // Remove 'apple'
@@ -96,12 +96,12 @@ await trie.insert('apple');
 
 #### `Trie.load(store: Store): Promise<Trie>`
 
-You can load back from disk any previously constructed trie using `Trie.load`. The `store` argument must be provided in this case.
+Using `Trie. load`, you can load any previously constructed trie back from disk. In this case, the `store` argument must be provided.
 
 ```js
 import { Store, Trie } from '@aiken-lang/merkle-patricia-forestry';
 
-// Construct a new trie with an on-disk storage under the filepath 'db'.
+// Construct a new trie with on-disk storage under the file path 'db'.
 const trie = await Trie.load(new Store('db'));
 ```
 
@@ -120,11 +120,11 @@ console.log(trie);
 //  └─ 9 #75eba4e4dae1
 ```
 
-The output is a pretty-printed visualization of the tree, with the full root hash first in a box, followed by the rest of the trie. For each sub-trie, a summary of their hashes is shown using a pound sign (e.g. `#eceea58af726`) as well as the branch path and prefix, if any, that lead to that point.
+The output is a pretty-printed visualisation of the tree, with the entire root hash first in a box, followed by the rest of the trie. For each sub-trie, a summary of their hashes is shown using a pound sign (e.g. `#eceea58af726`) as well as the branch path and prefix, if any, that leads to that point.
 
-For leaves, the remaining path (a.k.a suffix) is shown but truncated for brievety. The output also includes the key/value pertaining to that leaf.
+For leaves, the remaining path (a.k.a suffix) is shown but truncated for brevity. The output also includes the key/value pertaining to that leaf.
 
-Finally, the function is synchronous, and thus doesn't have access to children beyond
+Finally, the function is synchronous and thus doesn't have access to children beyond
 their hashes. You can, however, fetch more children using:
 
 #### `trie.fetchChildren(depth?: number = 0): Promise<()>`
@@ -151,11 +151,11 @@ console.log(trie);
 
 > [!TIP]
 >
-> To retrieve the entire trie, use `Number.MAX_SAFE_INTEGER`. But be careful for large tries may not fit in memory!
+> To retrieve the entire trie, use `Number.MAX_SAFE_INTEGER`. But be careful, for large tries may not fit in memory!
 
 #### `trie.save(): Promise<(Trie)>`
 
-To replace children by references again, simply use `trie.save()`.
+To replace children with references again, use `trie.save()`.
 
 ```js
 await trie.save();
@@ -172,7 +172,7 @@ console.log(trie);
 
 > [!NOTE]
 >
-> There's in principle no need to _manually save_ the trie otherwise. Operations on the trie such as _insert_ or _remove_ automatically modifies the store.
+> There's, in principle, no need to _manually save_ the trie otherwise. Operations on the trie such as _insert_ or _remove_ automatically modify the store.
 
 ### Accessing
 
@@ -201,7 +201,7 @@ const apple = await trie.childAt(
 
 #### `trie.prove(key: string|Buffer): Promise<Proof>`
 
-Let's get to the interesting part! The whole point of building a Merkle Patricia Forestry is to provide succinct proofs for items. A proof is portable and bound to both:
+Let's get to the exciting part! The whole point of building a Merkle Patricia Forestry is to provide succinct proofs for items. A proof is portable and bound to both:
 
 1. A specific item
 2. A specific trie
@@ -215,14 +215,14 @@ const proofTangerine = await trie.prove('tangerine');
 
 #### `proof.verify(includingItem?: bool = true): Buffer`
 
-A proof can be _verified_ by calling `.verify` on it. The verification is fully synchronous and yields a hash as a byte `Buffer`. If that hash matches the trie root hash, the proof is then valid.
+A proof can be _verified_ by calling `.verify` on it. The verification is fully synchronous and yields a hash as a byte `Buffer`. If that hash matches the trie root hash, the proof is valid.
 
 ```js
 proofTangerine.verify().equals(trie.hash);
 // true
 ```
 
-Proof can be computed in two manner. By default, they _include_ the item in the proof, thus checking for _inclusion_ in the trie. However, by setting `includingItem` to `false`, the proof will be checking for _exclusion_ and yield the root hash of the trie _without the item_.
+Proofs can be computed in two manners. By default, they _include_ the item in the proof, thus checking for _inclusion_ in the trie. However, by setting `includingItem` to `false`, the proof will check for _exclusion_ and yield the root hash of the trie _without the item_.
 
 ```js
 const previousHash = trie.hash;
@@ -251,7 +251,7 @@ proofBanana.verify(false).equals(previousHash);
 
 #### `proof.toJSON(): object`
 
-Proofs are opaque, but they can be serialised into various format such as JSON. The proof format is explained in greater details in [the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Proof-format).
+Proofs are opaque but can be serialised into various formats, such as JSON. The proof format is explained in greater detail in [the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Proof-format).
 
 ```js
 proofTangerine.toJSON();
@@ -276,7 +276,7 @@ proofTangerine.toJSON();
 
 #### `proof.toCBOR(): Buffer`
 
-JSON is cool, but proofs are ultimately meant to be passed on-chain as redeemer or datum. We thus provide a `.toCBOR` as well to serialise a proof into a format compatible with the on-chain expectations.
+JSON is cool, but proofs are ultimately meant to be passed on-chain as redeemer or datum. Thus, we provide a method `.toCBOR` to serialise a proof into a format compatible with the on-chain expectations.
 
 ```js
 proofTangerine.toCBOR().toString('hex');
