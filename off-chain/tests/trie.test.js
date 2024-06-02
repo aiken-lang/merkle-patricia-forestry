@@ -151,13 +151,18 @@ test('Trie.load', async t => {
   `);
 });
 
-test('Trie.insert: arbitrary', async t => {
+test('Trie.insert: whole trie in any order', async t => {
   await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
-    const trie = await shuffle(FRUITS_LIST).reduce(async (trie, fruit) => {
-      return (await trie).insert(fruit.key, fruit.value);
+    const trie = await shuffle(FRUITS_LIST).reduce(async (trie, fruit, ix) => {
+      trie = await trie;
+      t.is(trie.size, ix);
+      t.true(trie === await trie.insert(fruit.key, fruit.value));
+      await t.throwsAsync(() => trie.insert(fruit.key, fruit.value));
+      return trie;
     }, new Trie(store));
 
     t.false(trie.children.some(node => node !== undefined && node instanceof Trie))
+
     t.is(inspect(trie), unindent`
       ╔═══════════════════════════════════════════════════════════════════╗
       ║ #4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078 ║
@@ -258,6 +263,77 @@ test('Trie.insert: already inserted', async t => {
   t.deepEqual(await trie.save(), sameTrie);
 });
 
+
+// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------- Trie.remove
+// -----------------------------------------------------------------------------
+
+test('Trie.remove: from Leaf', async t => {
+  const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
+  t.true(trie instanceof Leaf);
+
+  await trie.remove('foo');
+
+  t.true(trie.isEmpty());
+  t.true(trie instanceof Trie);
+});
+
+
+test('Trie.remove: from Branch with 2 neighbors', async t => {
+  const trie = await Trie.fromList([
+    { key: 'foo', value: '14' },
+    { key: 'bar', value: '42' },
+  ]);
+  t.true(trie instanceof Branch);
+
+  await trie.remove('foo');
+
+  t.true(trie instanceof Leaf);
+  t.is(trie.size, 1);
+  t.is(await trie.store.size(), 2);
+});
+
+test('Trie.remove: from Branch with 2+ neighbors', async t => {
+  const trie = await Trie.fromList([
+    { key: 'foo', value: '14' },
+    { key: 'bar', value: '42' },
+    { key: 'baz', value: '27' },
+  ]);
+  t.true(trie instanceof Branch);
+
+  await trie.remove('foo');
+
+  t.true(trie instanceof Branch);
+  t.is(trie.size, 2);
+  t.is(await trie.store.size(), 4);
+});
+
+test('Trie.remove: whole trie in any order', async t => {
+  const initial_size = FRUITS_LIST.length;
+
+  await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
+    const trie = await shuffle(FRUITS_LIST).reduce(async (trie, fruit, ix) => {
+      trie = await trie;
+      t.is(trie.size, initial_size - ix);
+      t.true(trie === await trie.remove(fruit.key));
+      await t.throwsAsync(() => trie.prove(fruit.key));
+      await t.throwsAsync(() => trie.remove(fruit.key));
+      return trie;
+    }, Trie.fromList(FRUITS_LIST, store));
+
+    t.true(trie.isEmpty())
+    t.is(trie.size, 0);
+
+    t.false(trie instanceof Leaf);
+    t.false(trie instanceof Branch);
+
+    const root = await trie.store.get('__root__', (_, x) => Buffer.from(x, 'hex'));
+
+    t.true(root.equals(helpers.NULL_HASH));
+    t.is(await trie.store.size(), 1);
+  }));
+});
+
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------ Trie.prove
 // -----------------------------------------------------------------------------
@@ -273,8 +349,9 @@ test('Trie: can create proof for leaf-trie for existing element', async t => {
 
 test('Trie: cannot create proof for leaf-trie for non-existing elements', async t => {
   const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
-  const proof = await trie.prove('bar');
-  t.throws(() => proof.verify());
+  await t.throwsAsync(() => trie.prove('bar'), {
+    message(e) { return e.includes('not in trie') },
+  });
 });
 
 test('Trie: can create proof for simple tries', async t => {
@@ -325,12 +402,11 @@ test('Trie: checking for membership & insertion on complex trie', async t => {
 
     // For (re-)generating Aiken code for proofs.
 
-    const fruitName = fruit.key.split("[")[0];
-    console.log(`// ---------- ${fruitName}\n`);
-    console.log(`const ${fruitName} = "${fruit.key}"`);
-    console.log(`fn proof_${fruitName}() {\n${proof.toAiken()}\n}\n`);
-    console.log(`const ${fruitName}_serialised = "${proof.toCBOR().toString('hex')}"`);
-    console.log(`fn without_${fruitName}() {\n  mpf.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
+    // const fruitName = fruit.key.split("[")[0];
+    // console.log(`// ---------- ${fruitName}\n`);
+    // console.log(`const ${fruitName} = "${fruit.key}"`);
+    // console.log(`fn proof_${fruitName}() {\n${proof.toAiken()}\n}\n`);
+    // console.log(`fn without_${fruitName}() {\n  mpf.from_root(#"${trieWithout.hash.toString('hex')}")\n}\n\n`);
   });
 });
 

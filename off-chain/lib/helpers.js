@@ -1,6 +1,7 @@
 /** @module helpers */
 
 import assert from 'node:assert';
+import { inspect } from 'node:util';
 import { DIGEST_LENGTH, digest } from './crypto.js';
 
 
@@ -108,7 +109,7 @@ export function assertInstanceOf(instance, what, fn) {
 
     assert(
       fn ? fn(what[key], instance) : what[key] instanceof instance,
-      `${key} must be an instance of ${expected} but is ${got}`
+      `${key} must be an instance of ${expected} but is ${got}: ${inspect(what[key])}`
     );
   }
 }

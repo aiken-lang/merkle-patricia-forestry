@@ -87,12 +87,24 @@ export class Trie {
    */
   constructor(store = new Store(), hash = NULL_HASH, prefix = '', size = 0) {
     assertInstanceOf(Store, { store });
-
     this.hash = hash;
     this.prefix = prefix;
     this.size = size;
     this.store = store;
     this.isRoot = hash === NULL_HASH;
+  }
+
+
+  /**
+   * @param {Store} [store]
+   *   The data-store to use for storing and retrieving the underlying trie.
+   *
+   * @return {Promise<Trie>}
+   * @private
+   */
+  static async from(store) {
+    const trie = new Trie(store);
+    return trie.save();
   }
 
 
@@ -105,17 +117,26 @@ export class Trie {
    */
   static async load(store) {
     const root = await store.get(ROOT_KEY, (_, str) => Buffer.from(str, 'hex'));
-    const trie = await store.get(root, Trie.deserialise);
+    const trie = root.equals(NULL_HASH)
+      ? new Trie()
+      : await store.get(root, Trie.deserialise);
     trie.isRoot = true;
     return trie;
   }
 
 
-  /** Does nothing.
+  /** Saves the trie into the store, removing a previous occurence of it if any.
+   * Also makes sure to leave a special key to retrieve the trie root later.
+   *
+   * @param {Buffer} [previousHash] The previous hash of the node, to be removed.
    * @return {Promise<Trie>}
    * @private
    */
-  async save() {
+  async save(previousHash) {
+    if (previousHash !== undefined) {
+      await this.store.del(previousHash);
+    }
+
     if (this.isRoot) {
       await this.store.put(
         ROOT_KEY,
@@ -221,10 +242,24 @@ export class Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   async insert(key, value) {
-    await this.into(Leaf, intoPath(key), key, value);
-    return this;
+    return this.into(Leaf, intoPath(key), key, value);
   }
 
+  /**
+   * Remove the value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @returns {Promise<Trie>}
+   *   The modified trie, eventually.
+   *
+   * @throws {AssertionError} when a value already exists at the given key.
+   */
+  async remove(key) {
+    assert(false, `${key} not in trie`);
+  }
 
   /**
    * Mutate an instance of Trie/Branch/Leaf into another. This is typically
@@ -412,6 +447,7 @@ export class Leaf extends Trie {
     return leaf.save();
   }
 
+
   /** Set the prefix on a Leaf, and computes its corresponding hash. Both steps
    * are done in lock-step because the node's hash crucially includes its prefix.
    *
@@ -454,9 +490,10 @@ export class Leaf extends Trie {
    * @return {Promise<Trie>}
    * @private
    */
-  async save() {
+  async save(previousHash) {
+    this.hash = Leaf.computeHash(this.prefix, digest(this.value));
     await this.store.put(this.hash, this);
-    return super.save();
+    return super.save(previousHash);
   }
 
 
@@ -514,6 +551,25 @@ export class Leaf extends Trie {
 
 
   /**
+   * Remove the value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @returns {Promise<Trie>}
+   *   The modified trie, eventually.
+   *
+   * @throws {AssertionError} when a value already exists at the given key.
+   */
+  async remove(key) {
+    key = typeof key === 'string' ? Buffer.from(key) : key;
+    assert(this.key.equals(key), `${key} not in trie`);
+    return this.into(Trie);
+  }
+
+
+  /**
    * A custom function for inspecting a {@link Leaf}, with colors and nice formatting.
    * See {@link https://nodejs.org/api/util.html#utilinspectobject-showhidden-depth-colors}
    * for details.
@@ -548,6 +604,11 @@ export class Leaf extends Trie {
    * @private
    */
   async walk(path) {
+    assert(
+      path.startsWith(this.prefix),
+      `element at remaining path ${path} not in trie: non-matching prefix ${this.prefix}`,
+    );
+
     return new Proof(
       intoPath(this.key),
       path === this.prefix ? this.value : undefined
@@ -645,10 +706,7 @@ export class Branch extends Trie {
     // should be.
     children.forEach((node, ix) => {
       if (node !== undefined) {
-        assert(
-          node instanceof Trie,
-          `children[${ix}] must be an instance of Trie`
-        );
+        assertInstanceOf(Trie, { [`children[${ix}]`]: node });
 
         assert(
           !node.isEmpty(),
@@ -716,72 +774,164 @@ export class Branch extends Trie {
    * @throws {AssertionError} when a value already exists at the given key.
    */
   async insert(key, value) {
-    await this.store.batch(async () => {
-      const loop = async (node, path, parents) => {
-        const prefix = node.prefix.length > 0
-          ? commonPrefix([node.prefix, path])
-          : '';
+    try {
+      return await this.store.batch(async () => {
+        const loop = async (node, path, parents) => {
+          const prefix = node.prefix.length > 0
+            ? commonPrefix([node.prefix, path])
+            : '';
 
-        path = path.slice(prefix.length);
+          path = path.slice(prefix.length);
 
-        const thisNibble = nibble(path[0]);
+          const thisNibble = nibble(path[0]);
 
-        await node.fetchChildren();
+          await node.fetchChildren();
 
-        if (prefix.length < node.prefix.length) {
-          const newPrefix = node.prefix.slice(prefix.length);
-          const newNibble = nibble(newPrefix[0]);
+          if (prefix.length < node.prefix.length) {
+            const newPrefix = node.prefix.slice(prefix.length);
+            const newNibble = nibble(newPrefix[0]);
 
-          assert(thisNibble !== newNibble);
+            assert(thisNibble !== newNibble);
 
-          await node.into(Branch, prefix, {
-            [thisNibble]: await Leaf.from(
+            await node.into(Branch, prefix, {
+              [thisNibble]: await Leaf.from(
+                path.slice(1),
+                key,
+                value,
+                this.store,
+              ),
+              [newNibble]: await Branch.from(
+                node.prefix.slice(prefix.length + 1),
+                node.children,
+                this.store,
+              ),
+            });
+
+            return parents;
+          }
+
+          parents.unshift(node);
+
+          const child = node.children[thisNibble];
+
+          if (child === undefined) {
+            node.children[thisNibble] = await Leaf.from(
               path.slice(1),
               key,
               value,
-              this.store,
-            ),
-            [newNibble]: await Branch.from(
-              node.prefix.slice(prefix.length + 1),
-              node.children,
-              this.store,
-            ),
-          });
+              this.store
+            );
+            return parents;
+          }
 
-          return parents;
-        }
+          if (child instanceof Leaf) {
+            await child.insert(key, value);
+            return parents;
+          } else {
+            return loop(child, path.slice(1), parents);
+          }
+        };
 
-        parents.unshift(node);
+        const parents = await loop(this, intoPath(key), []);
 
-        const child = node.children[thisNibble];
+        await parents.reduce(async (task, node) => {
+          await task;
+          node.size += 1;
+          return node.save(node.hash);
+        }, Promise.resolve());
 
-        if (child === undefined) {
-          node.children[thisNibble] = await Leaf.from(
-            path.slice(1),
-            key,
-            value,
-            this.store
-          );
-          return parents;
-        }
+        return this;
+      });
+    } catch(e) {
+      // Ensures that children aren't kept in-memory when an insertion failed.
+      await this.save();
+      throw e;
+    }
+  }
 
-        if (child instanceof Leaf) {
-          await child.insert(key, value);
-          return parents;
-        } else {
-          return loop(child, path.slice(1), parents);
-        }
-      };
 
-      const parents = await loop(this, intoPath(key), []);
+  /**
+   * Remove the value at the given key and re-compute hashes of all nodes
+   * along the path.
+   *
+   * @param {Buffer|string} key
+   *   The key to insert. Strings are treated as UTF-8 byte buffers.
+   *
+   * @returns {Promise<Trie>}
+   *   The modified trie, eventually.
+   *
+   * @throws {AssertionError} when a value doesn't exists at the given key.
+   */
+  async remove(key) {
+    key = typeof key === 'string' ? Buffer.from(key) : key;
 
-      await Promise.all(parents.map(async (node) => {
-        node.size += 1;
-        await node.save(node.hash);
-      }));
-    });
+    function nonEmptyChildren(node) {
+      return node.children.flatMap((n, ix) => n === undefined ? [] : [[n, ix]]);
+    }
 
-    return this;
+    try {
+      return await this.store.batch(async () => {
+        const loop = async (node, path) => {
+          if (node instanceof Leaf) {
+            await node.remove(key);
+            return undefined;
+          }
+
+          await this.store.del(node.hash);
+
+          const cursor = node.prefix.length;
+
+          const thisNibble = nibble(path[cursor]);
+
+          await node.fetchChildren();
+
+          const child = await node.children[thisNibble];
+
+          // NOTE: 'loop' returns 'undefined' when the child is a leaf, which means
+          // we've reached the end of the trie. So that node gets effectively removed.
+          //
+          // Then, because we call _loop_ before doing any further modification, we can
+          // continue knowing that children have already been updated.
+          node.children[thisNibble] = await loop(child, path.slice(cursor + 1));
+
+          node.size -= 1;
+
+          const neighbors = nonEmptyChildren(node);
+
+          // NOTE: We do not allow branches with only one child. So if after modification,
+          // there's only one child left (a.k.a the neighbor), we merge our only child up
+          // with ourself while preserving its stucture for the child may be a Leaf or
+          // another Branch node.
+          if (neighbors.length === 1) {
+            const [neighbor, neighborNibble] = neighbors[0];
+
+            const prefix = [
+              node.prefix,
+              neighborNibble.toString(16),
+              neighbor.prefix,
+            ].join('');
+
+            await this.store.del(neighbor.hash);
+
+            if (neighbor instanceof Leaf) {
+              return node.into(Leaf, prefix, neighbor.key, neighbor.value);
+            }
+
+            node.children = neighbor.children;
+            node.prefix = prefix;
+            node.size = neighbor.size;
+          }
+
+          return node.save();
+        };
+
+        return loop(this, intoPath(key));
+      });
+    } catch(e) {
+      // Ensures that children aren't kept in-memory when an deletion failed.
+      await this.save();
+      throw e;
+    }
   }
 
 
@@ -888,14 +1038,11 @@ export class Branch extends Trie {
   /** Recompute a branch's size and hash after modification; also collapses
    * all children back to hashes.
    *
+   * @param {Buffer} [previousHash] The previous hash of the node, to be removed.
    * @return {Promise<Branch>} This current object, eventually modified.
    * @private
    */
   async save(previousHash) {
-    if (previousHash !== undefined) {
-      await this.store.del(previousHash);
-    }
-
     this.hash = Branch.computeHash(this.prefix, merkleRoot(this.children));
 
     this.children = this.children.map(child => child instanceof Trie
@@ -905,7 +1052,7 @@ export class Branch extends Trie {
 
     await this.store.put(this.hash, this);
 
-    return super.save();
+    return super.save(previousHash);
   }
 
 

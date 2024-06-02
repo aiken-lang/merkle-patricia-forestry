@@ -46,9 +46,9 @@ const trie = await Trie.fromList([
 
 #### `trie.insert(key: string|Buffer, value: string|Buffer) -> Promise<Trie>`
 
-While `Trie.fromList` provide a convenient way to create small tries, mainly for testing purposes; the main ways of constructing tries is by repeatedly calling `.insert` for each item to insert.
+While `Trie.fromList` provide a convenient way to create small tries, mainly for testing purposes; the main ways of constructing tries is by repeatedly calling `.insert` for each item to insert. . Returns the same reference to the trie as a Promise, for convenience.
 
-Note that you can only insert one item at the time, so make sure to `await` promises before attempting a new insert. Not doing so will trigger an exception.
+Note that you can only insert one item at the time, so make sure to `await` promises before attempting a new insert. Not doing so will trigger an exception. An exception is also raised when trying to insert an item at a key that is already known. Delete first!
 
 ```js
 // Insert items one-by-one
@@ -77,6 +77,22 @@ await items.reduce(async (trie, { key, value }) => {
 > [!TIP]
 >
 > Both the _key_ and _value_ must be either `string`s or byte `Buffer`. When a `string` is provided, it is treated as a UTF-8 byte `Buffer`.
+
+#### `trie.remove(key: string|Buffer) -> Promise<Trie>`
+
+Similarly, the reverse operation `remove` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. Returns the same reference to the trie as a Promise, for convenience.
+
+```js
+// Remove 'apple'
+await trie.insert('apple');
+
+// Throws an exception, apple is no longer in the trie.
+await trie.insert('apple');
+```
+
+> [!TIP]
+>
+> The _key_ must be either `string`s or byte `Buffer`. When a `string` is provided, it is treated as a UTF-8 byte `Buffer`.
 
 #### `Trie.load(store: Store): Promise<Trie>`
 
@@ -156,7 +172,7 @@ console.log(trie);
 
 > [!NOTE]
 >
-> There's in principle no need to _manually save_ the trie otherwise. Operations on the trie such as _insert_ or _delete_ automatically modifies the store.
+> There's in principle no need to _manually save_ the trie otherwise. Operations on the trie such as _insert_ or _remove_ automatically modifies the store.
 
 ### Accessing
 

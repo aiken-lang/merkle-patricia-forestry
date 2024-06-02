@@ -22,15 +22,19 @@ export class Store {
 
     this.#batch = [];
 
+    let result;
     try {
-      await callback();
+      result = await callback();
     } catch (e) {
       this.#batch = undefined;
       throw e;
     }
 
     await this.#db.batch(this.#batch);
+
     this.#batch = undefined;
+
+    return result;
   }
 
   async get(key, deserialise) {
