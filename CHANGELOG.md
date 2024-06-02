@@ -24,7 +24,7 @@
       - [`trie.save(): Promise<(Trie)>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triesave-promisetrie)
     - **Modifying**
       - [`trie.insert(key: string|Buffer, value: string|Buffer) -> Promise<Trie>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#trieinsertkey-stringbuffer-value-stringbuffer---promisetrie)
-      - [`trie.remove(key: string|Buffer) -> Promise<Trie>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#trieremovekey-stringbuffer--promisetrie)
+      - [`trie.remove(key: string|Buffer) -> Promise<Trie>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#trieremovekey-stringbuffer---promisetrie)
     - **Inspecting**
       - [`trie[inspect.custom]`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#inspecting)
       - [`trie.fetchChildren(depth?: number = 0): Promise<()>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triefetchchildrendepth-number--0-promise)
