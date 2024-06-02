@@ -128,7 +128,7 @@ export class Trie {
   /** Saves the trie into the store, removing a previous occurence of it if any.
    * Also makes sure to leave a special key to retrieve the trie root later.
    *
-   * @param {Buffer} [previousHash] The previous hash of the node, to be removed.
+   * @param {Buffer} [previousHash] The previous hash of the node, to be deleted.
    * @return {Promise<Trie>}
    * @private
    */
@@ -193,7 +193,7 @@ export class Trie {
 
       // Construct sub-tries recursively, for each remainining digits.
       //
-      // NOTE(1): We have just removed the common prefix from all children,
+      // NOTE(1): We have just deleted the common prefix from all children,
       // so it safe to look at the first digit of each remaining key and route
       // values based on that. Some branches may be empty, which we replace
       // with 'undefined'.
@@ -257,7 +257,7 @@ export class Trie {
    *
    * @throws {AssertionError} when a value already exists at the given key.
    */
-  async remove(key) {
+  async delete(key) {
     assert(false, `${key} not in trie`);
   }
 
@@ -562,7 +562,7 @@ export class Leaf extends Trie {
    *
    * @throws {AssertionError} when a value already exists at the given key.
    */
-  async remove(key) {
+  async delete(key) {
     key = typeof key === 'string' ? Buffer.from(key) : key;
     assert(this.key.equals(key), `${key} not in trie`);
     return this.into(Trie);
@@ -862,7 +862,7 @@ export class Branch extends Trie {
    *
    * @throws {AssertionError} when a value doesn't exists at the given key.
    */
-  async remove(key) {
+  async delete(key) {
     key = typeof key === 'string' ? Buffer.from(key) : key;
 
     function nonEmptyChildren(node) {
@@ -873,7 +873,7 @@ export class Branch extends Trie {
       return await this.store.batch(async () => {
         const loop = async (node, path) => {
           if (node instanceof Leaf) {
-            await node.remove(key);
+            await node.delete(key);
             return undefined;
           }
 
@@ -888,7 +888,7 @@ export class Branch extends Trie {
           const child = await node.children[thisNibble];
 
           // NOTE: 'loop' returns 'undefined' when the child is a leaf, which means
-          // we've reached the end of the trie. So that node gets effectively removed.
+          // we've reached the end of the trie. So that node gets effectively deleted.
           //
           // Then, because we call _loop_ before doing any further modification, we can
           // continue knowing that children have already been updated.
@@ -1038,7 +1038,7 @@ export class Branch extends Trie {
   /** Recompute a branch's size and hash after modification; also collapses
    * all children back to hashes.
    *
-   * @param {Buffer} [previousHash] The previous hash of the node, to be removed.
+   * @param {Buffer} [previousHash] The previous hash of the node, to be deleted.
    * @return {Promise<Branch>} This current object, eventually modified.
    * @private
    */

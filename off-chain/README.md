@@ -78,7 +78,7 @@ await items.reduce(async (trie, { key, value }) => {
 >
 > Both the _key_ and _value_ must be either `string`s or byte `Buffer`. When a `string` is provided, it is treated as a UTF-8 byte `Buffer`.
 
-#### `trie.remove(key: string|Buffer) -> Promise<Trie>`
+#### `trie.delete(key: string|Buffer) -> Promise<Trie>`
 
 Similarly, the reverse operation `remove` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. For convenience, it returns the same reference to the trie as a Promise.
 

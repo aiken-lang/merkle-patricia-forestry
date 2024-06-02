@@ -265,35 +265,35 @@ test('Trie.insert: already inserted', async t => {
 
 
 // -----------------------------------------------------------------------------
-// ----------------------------------------------------------------- Trie.remove
+// ----------------------------------------------------------------- Trie.delete
 // -----------------------------------------------------------------------------
 
-test('Trie.remove: from Leaf', async t => {
+test('Trie.delete: from Leaf', async t => {
   const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
   t.true(trie instanceof Leaf);
 
-  await trie.remove('foo');
+  await trie.delete('foo');
 
   t.true(trie.isEmpty());
   t.true(trie instanceof Trie);
 });
 
 
-test('Trie.remove: from Branch with 2 neighbors', async t => {
+test('Trie.delete: from Branch with 2 neighbors', async t => {
   const trie = await Trie.fromList([
     { key: 'foo', value: '14' },
     { key: 'bar', value: '42' },
   ]);
   t.true(trie instanceof Branch);
 
-  await trie.remove('foo');
+  await trie.delete('foo');
 
   t.true(trie instanceof Leaf);
   t.is(trie.size, 1);
   t.is(await trie.store.size(), 2);
 });
 
-test('Trie.remove: from Branch with 2+ neighbors', async t => {
+test('Trie.delete: from Branch with 2+ neighbors', async t => {
   const trie = await Trie.fromList([
     { key: 'foo', value: '14' },
     { key: 'bar', value: '42' },
@@ -301,23 +301,23 @@ test('Trie.remove: from Branch with 2+ neighbors', async t => {
   ]);
   t.true(trie instanceof Branch);
 
-  await trie.remove('foo');
+  await trie.delete('foo');
 
   t.true(trie instanceof Branch);
   t.is(trie.size, 2);
   t.is(await trie.store.size(), 4);
 });
 
-test('Trie.remove: whole trie in any order', async t => {
+test('Trie.delete: whole trie in any order', async t => {
   const initial_size = FRUITS_LIST.length;
 
   await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
     const trie = await shuffle(FRUITS_LIST).reduce(async (trie, fruit, ix) => {
       trie = await trie;
       t.is(trie.size, initial_size - ix);
-      t.true(trie === await trie.remove(fruit.key));
+      t.true(trie === await trie.delete(fruit.key));
       await t.throwsAsync(() => trie.prove(fruit.key));
-      await t.throwsAsync(() => trie.remove(fruit.key));
+      await t.throwsAsync(() => trie.delete(fruit.key));
       return trie;
     }, Trie.fromList(FRUITS_LIST, store));
 
