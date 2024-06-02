@@ -1,6 +1,6 @@
 {
   "name": "@aiken-lang/merkle-patricia-forestry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "repository": "https://github.com/aiken-lang/merkle-patricia-forestry.git ",
   "author": "KtorZ <matthias.benkort@gmail.com>",
@@ -15,7 +15,8 @@
     "cardano"
   ],
   "type": "module",
-  "main": "lib/index.mjs",
+  "module": "./lib/index.js",
+  "exports": "./lib/index.js",
   "license": "MPL-2.0",
   "scripts": {
     "test": "ava",
