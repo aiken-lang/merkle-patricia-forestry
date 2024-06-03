@@ -15,7 +15,7 @@
 
 ## Overview
 
-A Merkle Patricia Trie is a persistent & authenticated data structure to map between arbitrary keys and values. It's like a hashmap on steroids, which isn't temperable. The items are represented in a space-optimized trie (a.k.a prefix tree) of radix 16. The hash digest of their keys gives the path to values in the trie. For more details, read [the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis).
+A Merkle Patricia Trie is a persistent & authenticated data structure to map between arbitrary keys and values. It's like a hashmap on steroids, which isn't tamperable. The items are represented in a space-optimized trie (a.k.a prefix tree) of radix 16. The hash digest of their keys gives the path to values in the trie. For more details, read [the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis).
 
 The use cases are numerous, such as maintaining large on-chain registries (e.g. domains) or providing unreasonably large oracled datasets of intrinsic data (e.g. a map of delegators/delegatees) or extrinsic data (e.g. GitHub data pertaining to an ecosystem of projects). It's also perfectly suited for long-running datasets that grow at a _slow_ rate (e.g. a PoW blockchain).
 
