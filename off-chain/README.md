@@ -80,7 +80,7 @@ await items.reduce(async (trie, { key, value }) => {
 
 #### `trie.delete(key: string|Buffer) -> Promise<Trie>`
 
-Similarly, the reverse operation `remove` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. For convenience, it returns the same reference to the trie as a Promise.
+Similarly, the reverse operation `delete` is available to remove elements from the trie. It fails with an exception if the given key is not in the trie. For convenience, it returns the same reference to the trie as a Promise.
 
 ```js
 // Remove 'apple'
