@@ -84,10 +84,10 @@ Similarly, the reverse operation `remove` is available to remove elements from t
 
 ```js
 // Remove 'apple'
-await trie.insert('apple');
+await trie.delete('apple');
 
 // Throws an exception, apple is no longer in the trie.
-await trie.insert('apple');
+await trie.delete('apple');
 ```
 
 > [!TIP]
