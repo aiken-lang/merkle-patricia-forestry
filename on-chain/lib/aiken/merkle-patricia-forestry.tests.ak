@@ -256,6 +256,22 @@ test example_delete() {
   }
 }
 
+test example_update() {
+  // https://media3.giphy.com/media/Bj5ILhCPm8EQ8/giphy.gif
+  mpf.update(trie(), banana, proof_banana(), "🍌", "🍆") == updated_banana()
+}
+
+test example_idempotent_update() {
+  and {
+    mpf.update(trie(), banana, proof_banana(), "🍌", "🍌") == trie(),
+    mpf.update(updated_banana(), banana, proof_banana(), "🍆", "🍆") == updated_banana(),
+  }
+}
+
+test example_fake_update() fail {
+  mpf.update(without_banana(), banana, proof_banana(), "🍌", "🍆") == updated_banana()
+}
+
 // -------------------- Some notable cases
 
 test example_insert_whatever() {
@@ -467,6 +483,13 @@ fn proof_banana() {
 fn without_banana() {
   mpf.from_root(
     #"557990b1257679f2b8e09c507f2582b0566579a2fc26d0d8a6b59a4a88ef16db",
+  )
+}
+
+// The root hash we get with `banana` mapped to 🍆 instead
+fn updated_banana() {
+  mpf.from_root(
+    #"9057d02799a012a9d47fab6f9f5c43b4b2bf94584b339e3b4d3969fd95d55972"
   )
 }
 
