@@ -154,7 +154,6 @@ pub fn update(
   old_value: ByteArray,
   new_value: ByteArray,
 ) {
-  // TODO: could we do this with a single traversal? `something(key, old_value, new_value, proof) -> (old_root, new_root)`?
   expect including(key, old_value, proof) == self.root
   // If we were doing a delete followed by an insert, we'd end up checking the `excluding` again here
   MerklePatriciaForestry { root: including(key, new_value, proof) }

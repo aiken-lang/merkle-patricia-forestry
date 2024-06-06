@@ -489,7 +489,7 @@ fn without_banana() {
 // The root hash we get with `banana` mapped to 🍆 instead
 fn updated_banana() {
   mpf.from_root(
-    #"9057d02799a012a9d47fab6f9f5c43b4b2bf94584b339e3b4d3969fd95d55972"
+    #"9057d02799a012a9d47fab6f9f5c43b4b2bf94584b339e3b4d3969fd95d55972",
   )
 }
 
