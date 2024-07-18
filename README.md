@@ -42,7 +42,7 @@ See [off-chain](./off-chain#readme) for usage.
 ### On-chain (Aiken)
 
 ```bash
-aiken packages add --version 1.0.1 aiken-lang/merkle-patricia-forestry
+aiken add --version 1.0.1 aiken-lang/merkle-patricia-forestry
 ```
 
 See [on-chain](./on-chain#readme) for usage.
