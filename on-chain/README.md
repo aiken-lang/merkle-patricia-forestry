@@ -5,7 +5,7 @@ This package provides an Aiken library for working with an authenticated key/val
 ## Installation
 
 ```
-aiken add --version 1.0.1 aiken-lang/merkle-patricia-forestry
+aiken add --version 1.1.0 aiken-lang/merkle-patricia-forestry
 ```
 
 ## Documentation
