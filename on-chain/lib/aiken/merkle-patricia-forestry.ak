@@ -48,6 +48,9 @@ const blake2b_256_digest_size = 32
 // ------------------------------------------------------ Merkle Patricia Forest
 // -----------------------------------------------------------------------------
 
+/// since          | <code>1.0.0</code>
+/// ---            | ---
+///
 /// A Merkle Patricia Forestry, typically constructed from a root hash digest
 /// using [`from_root`](#from_root).
 ///
@@ -61,6 +64,9 @@ pub opaque type MerklePatriciaForestry {
   root: ByteArray,
 }
 
+/// since | <code>1.0.0</code>
+/// ---   | ---
+///
 /// Construct a new [MerklePatriciaForestry](#MerklePatriciaForestry) from its
 /// root. On-chain, we actually only need the / root
 ///
@@ -70,11 +76,25 @@ pub fn from_root(root: ByteArray) -> MerklePatriciaForestry {
   MerklePatriciaForestry { root }
 }
 
+/// since | <code>1.1.0</code>
+/// ---   | ---
+///
+/// Get the root hash digest of a [MerklePatriciaForestry](#MerklePatriciaForestry).
+pub fn root(self: MerklePatriciaForestry) -> ByteArray {
+  self.root
+}
+
+/// since | <code>1.0.0</code>
+/// ---   | ---
+///
 /// Construct a new empty [MerklePatriciaForestry](#MerklePatriciaForestry).
 pub fn empty() -> MerklePatriciaForestry {
   MerklePatriciaForestry { root: null_hash }
 }
 
+/// since | <code>1.0.0</code>
+/// ---   | ---
+///
 /// Check whether a [MerklePatriciaForestry](#MerklePatriciaForestry) is empty.
 ///
 /// ```aiken
@@ -84,6 +104,9 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
   self.root == null_hash
 }
 
+/// since | <code>1.0.0</code>
+/// ---   | ---
+///
 /// Test whether an element is present in the trie with a specific value. This
 /// requires a [Proof](#Proof) of inclusion for the element. The latter can be
 /// obtained off-chain from the whole trie containing the element.
@@ -98,15 +121,17 @@ pub fn has(
   including(key, value, proof) == self.root
 }
 
-/// **fails** when | the [Proof](#Proof) is invalid
-/// ---            | ---
-///
-/// **fails** when | there's already an element in the trie at the given key
-/// ---            | ---
+/// since | <code>1.0.0</code>
+/// ---   | ---
 ///
 /// Insert an element in the trie. This requires a [Proof](#Proof) of inclusion
 /// for the element. The latter can be obtained off-chain from the whole trie
 /// containing the element.
+///
+/// #### Fails when
+///
+/// - The [Proof](#Proof) is invalid.
+/// - There's already an element in the trie at the given key.
 pub fn insert(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -117,15 +142,17 @@ pub fn insert(
   MerklePatriciaForestry { root: including(key, value, proof) }
 }
 
-/// **fails** when | the [Proof](#Proof) is invalid
-/// ---            | ---
-///
-/// **fails** when | there's already an element in the trie at the given key
-/// ---            | ---
+/// since | <code>1.0.0</code>
+/// ---   | ---
 ///
 /// Remove an element from the trie. This requires a [Proof](#Proof) of
 /// inclusion for the element. The latter can be obtained off-chain from the
 /// whole trie containing the element.
+///
+/// #### Fails when
+///
+/// - the [Proof](#Proof) is invalid
+/// - there's already an element in the trie at the given key
 pub fn delete(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -136,9 +163,7 @@ pub fn delete(
   MerklePatriciaForestry { root: excluding(key, proof) }
 }
 
-/// **fails** when | the [Proof](#Proof) is invalid
-/// ---            | ---
-/// **fails** when | there's no element in the trie at the given key
+/// since          | <code>1.1.0</code>
 /// ---            | ---
 ///
 /// Update an element in the trie with a a new value. This requires a [Proof](#Proof)
@@ -147,6 +172,11 @@ pub fn delete(
 ///
 /// Can be thought of as a delete, followed by an insert, but is able to do it with one fewer
 /// membership checks
+///
+/// #### fails when
+///
+/// - The [Proof](#Proof) is invalid.
+/// - There's no element in the trie at the given key.
 pub fn update(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -163,6 +193,9 @@ pub fn update(
 // ----------------------------------------------------------------------- Proof
 // -----------------------------------------------------------------------------
 
+/// since          | <code>1.0.0</code>
+/// ---            | ---
+///
 /// A Proof is a list of [Step](#Step) which is processed from left to right,
 /// which corresponds to the neighbor nodes along the _path_ to the element being
 /// proved.
@@ -172,6 +205,9 @@ pub fn update(
 pub type Proof =
   List<ProofStep>
 
+/// since          | <code>1.0.0</code>
+/// ---            | ---
+///
 /// We distinguish three kind of proof steps: Branch, Fork and Leaf. Each step
 /// contains a `skip` value which corresponds to the length of the common prefix
 /// at that particular level.
@@ -183,6 +219,9 @@ pub type ProofStep {
   Leaf { skip: Int, key: ByteArray, value: ByteArray }
 }
 
+/// since          | <code>1.0.0</code>
+/// ---            | ---
+///
 /// A neighbor node used in a proof. See [Proof](#Proof) for details.
 pub type Neighbor {
   nibble: Int,
