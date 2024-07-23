@@ -55,7 +55,7 @@ jobs:
       - name: 🧰 Install Aiken
         uses: aiken-lang/setup-aiken@v1
         with:
-          version: v1.0.28-alpha
+          version: v1.0.29-alpha
 
       - name: 📝 Run fmt
         working-directory: on-chain
