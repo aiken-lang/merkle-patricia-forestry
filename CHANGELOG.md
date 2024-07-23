@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.0 - 2024-07-23
+
+### Added
+
+- Two new functions to the on-chain API:
+  - [`root(MerklePatriciaForestry) -> ByteArray`](https://aiken-lang.github.io/merkle-patricia-forestry/aiken/merkle_patricia_forestry.html#root)
+  - [`update(self, key, proof, old_value, new_value) -> MerklePatriciaForestry`](https://aiken-lang.github.io/merkle-patricia-forestry/aiken/merkle_patricia_forestry.html#update)
+
+### Changed
+
+N/A
+
+### Removed
+
+N/A
+
 ## v1.0.1 - 2024-06-02
 
 ### Added
