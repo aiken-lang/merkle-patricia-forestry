@@ -64,6 +64,8 @@ pub opaque type MerklePatriciaForestry {
   root: ByteArray,
 }
 
+// ## Constructing
+
 /// since | <code>1.0.0</code>
 /// ---   | ---
 ///
@@ -76,14 +78,6 @@ pub fn from_root(root: ByteArray) -> MerklePatriciaForestry {
   MerklePatriciaForestry { root }
 }
 
-/// since | <code>1.1.0</code>
-/// ---   | ---
-///
-/// Get the root hash digest of a [MerklePatriciaForestry](#MerklePatriciaForestry).
-pub fn root(self: MerklePatriciaForestry) -> ByteArray {
-  self.root
-}
-
 /// since | <code>1.0.0</code>
 /// ---   | ---
 ///
@@ -91,6 +85,8 @@ pub fn root(self: MerklePatriciaForestry) -> ByteArray {
 pub fn empty() -> MerklePatriciaForestry {
   MerklePatriciaForestry { root: null_hash }
 }
+
+// ## Querying
 
 /// since | <code>1.0.0</code>
 /// ---   | ---
@@ -120,6 +116,8 @@ pub fn has(
 ) -> Bool {
   including(key, value, proof) == self.root
 }
+
+// # Modifying
 
 /// since | <code>1.0.0</code>
 /// ---   | ---
@@ -187,6 +185,16 @@ pub fn update(
   expect including(key, old_value, proof) == self.root
   // If we were doing a delete followed by an insert, we'd end up checking the `excluding` again here
   MerklePatriciaForestry { root: including(key, new_value, proof) }
+}
+
+// ## Transforming
+
+/// since | <code>1.1.0</code>
+/// ---   | ---
+///
+/// Get the root hash digest of a [MerklePatriciaForestry](#MerklePatriciaForestry).
+pub fn root(self: MerklePatriciaForestry) -> ByteArray {
+  self.root
 }
 
 // -----------------------------------------------------------------------------

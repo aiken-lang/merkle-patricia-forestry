@@ -1,3 +1,5 @@
+//// @hidden
+////
 //// This module contains internal functions used by the library. They are only
 //// exposed for internal testing and module splitting.
 

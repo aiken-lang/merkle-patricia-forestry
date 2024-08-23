@@ -1,5 +1,5 @@
 name = "aiken-lang/merkle-patricia-forestry"
-version = "1.1.0"
+version = "main/on-chain"
 license = "MPL-2.0"
 description = "Aiken contracts for project 'aiken-lang/merkle-patricia-forestry'"
 
