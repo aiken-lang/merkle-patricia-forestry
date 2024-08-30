@@ -13,16 +13,13 @@ pub const null_hash =
   #"0000000000000000000000000000000000000000000000000000000000000000"
 
 /// null_hash_2 = combine(null_hash, null_hash)
-pub const null_hash_2 =
-  #"0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761"
+pub const null_hash_2 = combine(null_hash, null_hash)
 
 /// null_hash_4 = combine(null_hash_2, null_hash_2)
-pub const null_hash_4 =
-  #"85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1"
+pub const null_hash_4 = combine(null_hash_2, null_hash_2)
 
 /// null_hash_8 = combine(null_hash_4, null_hash_4)
-pub const null_hash_8 =
-  #"b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a"
+pub const null_hash_8 = combine(null_hash_4, null_hash_4)
 
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------- merkle_xx

@@ -10,10 +10,10 @@ platform = "github"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "2.0.0"
+version = "v2"
 source = "github"
 
 [[dependencies]]
 name = "aiken-lang/fuzz"
-version = "main"
+version = "v2"
 source = "github"

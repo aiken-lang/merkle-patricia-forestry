@@ -53,16 +53,16 @@ This library implements a few optimizations. We borrow ideas from the [Ethereum'
 
 While this optimization sacrifices some memory and CPU execution units for smaller proof sizes, the library ultimately achieves a good trade-off. The table below summarizes the proof size, memory units, and CPU units for various sizes of tries. Note that the numbers in the table correspond to _one proof verification_ (e.g., membership). Insertion and deletion in the trie both require _two proof verifications_, so double the numbers!
 
-trie size | avg proof size (bytes) | avg proof mem units | avg proof cpu units |
----:      | -------------:         | ------------:       | ------------:       |
- 10²      | 250                    | 70K                 | 28M                 |
- 10³      | 350                    | 100K                | 42M                 |
- 10⁴      | 460                    | 130K                | 56M                 |
- 10⁵      | 560                    | 160K                | 70M                 |
- 10⁶      | 670                    | 190K                | 84M                 |
- 10⁷      | 780                    | 220K                | 98M                 |
- 10⁸      | 880                    | 250K                | 112M                |
- 10⁹      | 990                    | 280K                | 126M                |
+trie size | avg proof size (bytes) | avg proof mem units     | avg proof cpu units    |
+---:      | -------------:         | ------------:           | ------------:          |
+10²       | 250                    | 70K  <sup>(0.70%)</sup> | 18M <sup>(0.12%)</sup> |
+10³       | 350                    | 100K <sup>(1.00%)</sup> | 26M <sup>(0.19%)</sup> |
+10⁴       | 460                    | 130K <sup>(1.30%)</sup> | 35M <sup>(0.25%)</sup> |
+10⁵       | 560                    | 160K <sup>(1.60%)</sup> | 44M <sup>(0.31%)</sup> |
+10⁶       | 670                    | 190K <sup>(1.90%)</sup> | 53M <sup>(0.38%)</sup> |
+10⁷       | 780                    | 220K <sup>(2.20%)</sup> | 62M <sup>(0.44%)</sup> |
+10⁸       | 880                    | 250K <sup>(2.50%)</sup> | 71M <sup>(0.51%)</sup> |
+10⁹       | 990                    | 280K <sup>(2.80%)</sup> | 79M <sup>(0.56%)</sup> |
 
  > [!NOTE]
  >

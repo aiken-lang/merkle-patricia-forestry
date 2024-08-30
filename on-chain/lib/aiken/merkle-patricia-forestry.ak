@@ -78,13 +78,12 @@ pub fn from_root(root: ByteArray) -> MerklePatriciaForestry {
   MerklePatriciaForestry { root }
 }
 
-/// since | <code>1.0.0</code>
+/// since | <code>2.0.0</code>
 /// ---   | ---
 ///
 /// Construct a new empty [MerklePatriciaForestry](#MerklePatriciaForestry).
-pub fn empty() -> MerklePatriciaForestry {
+pub const empty: MerklePatriciaForestry =
   MerklePatriciaForestry { root: null_hash }
-}
 
 // ## Querying
 

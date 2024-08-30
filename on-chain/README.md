@@ -5,7 +5,7 @@ This package provides an Aiken library for working with an authenticated key/val
 ## Installation
 
 ```
-aiken add --version 1.1.0 aiken-lang/merkle-patricia-forestry
+aiken add aiken-lang/merkle-patricia-forestry --version 2.0.0
 ```
 
 ## Documentation
@@ -16,7 +16,7 @@ The documentation is generated from `aiken docs` and [available here](https://ai
 
 A non-trivial example of a [fruit map](https://github.com/aiken-lang/merkle-patricia-forestry/blob/main/on-chain/lib/aiken/merkle-patricia-forestry.tests.ak#L90) is available in the source. It illustrate how to use the various `from_root`, `has`, `insert` and `delete` primitives.
 
-```ak
+```aiken
 test insert_bitcoin_block_845602() {
   let trie =
     mpf.from_root(
