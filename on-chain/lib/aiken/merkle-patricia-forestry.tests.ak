@@ -1,6 +1,6 @@
 use aiken/cbor
+use aiken/collection/list
 use aiken/fuzz
-use aiken/list
 use aiken/merkle_patricia_forestry.{
   Branch, Fork, Leaf, MerklePatriciaForestry, Neighbor, Proof, ProofStep,
 } as mpf

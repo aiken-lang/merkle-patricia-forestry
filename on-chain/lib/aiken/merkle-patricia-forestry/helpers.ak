@@ -4,7 +4,7 @@
 //// exposed for internal testing and module splitting.
 
 use aiken/builtin.{blake2b_256, index_bytearray}
-use aiken/bytearray
+use aiken/primitive/bytearray
 
 // -----------------------------------------------------------------------------
 // --------------------------------------------------------------------- combine

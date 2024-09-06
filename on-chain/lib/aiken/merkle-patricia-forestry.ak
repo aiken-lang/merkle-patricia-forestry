@@ -31,11 +31,11 @@
 ////  10⁹ |          990   | 280K          | 126M          |
 
 use aiken/builtin.{blake2b_256, slice_bytearray}
-use aiken/bytearray
 use aiken/merkle_patricia_forestry/helpers.{combine, nibble, nibbles, suffix}
 use aiken/merkle_patricia_forestry/merkling.{
   merkle_16, null_hash, sparse_merkle_16,
 }
+use aiken/primitive/bytearray
 
 // -----------------------------------------------------------------------------
 // ------------------------------------------------------------------- Constants
