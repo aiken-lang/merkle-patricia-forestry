@@ -323,6 +323,30 @@ export class Trie {
     return loop(Promise.resolve(this), 0);
   }
 
+  /**
+   * Retrieves the value at the given key from the Trie.
+   *
+   * @param {Buffer|string} key
+   *   The key to search for. Strings are treated as UTF-8 byte buffers.
+   * @returns {Promise<Buffer|undefined>}
+   *   The value at the specified key, or `undefined` if the key is not found.
+   */
+  async get(key) {
+    // Convert the key into a path of nibbles
+    const path = intoPath(key);
+    
+    // Use childAt to find the node corresponding to the path
+    const node = await this.childAt(path);
+    
+    key = typeof key === 'string' ? Buffer.from(key) : key;
+    // If the node is a Leaf and the key matches, return the value
+    if (node instanceof Leaf && node.key.equals(key)) {
+      return node.value;
+    }
+  
+    // Return undefined if no matching node is found
+    return undefined;
+  }
 
   /**
    * Creates a proof of inclusion of a given key in the trie.
