@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { Level } from 'level';
+import { NULL_HASH } from './helpers.js';
 
 export class Store {
   #batch;
@@ -38,11 +39,11 @@ export class Store {
   }
 
   async get(key, deserialise) {
-    return deserialise(key, await this.#db.get(key.toString('hex')), this);
+    return deserialise(key, await this.#db.get((key ?? NULL_HASH).toString('hex')), this);
   }
 
   async put(key, value) {
-    key = key.toString('hex'),
+    key = (key ?? NULL_HASH).toString('hex'),
     value = value.serialise();
 
     if (this.#batch !== undefined) {
@@ -53,7 +54,7 @@ export class Store {
   }
 
   async del(key) {
-    key = key.toString('hex');
+    key = (key ?? NULL_HASH).toString('hex');
 
     if (this.#batch !== undefined) {
       this.#batch.push({ type: 'del', key });

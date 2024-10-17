@@ -53,6 +53,11 @@ test('Trie: a new Trie is always empty', t => {
   t.true(trie.isEmpty());
 });
 
+test('Trie: an empty Trie has no hash', t => {
+  const trie = new Trie();
+  t.is(trie.hash, null)
+});
+
 test('Trie: inspect an empty trie', t => {
   const trie = new Trie();
   t.is(inspect(trie), 'ø');
@@ -62,11 +67,21 @@ test('Trie: can construct from an empty list', async t => {
   t.deepEqual(await Trie.fromList([]), new Trie());
 });
 
+
+test('Trie: cannot prove anything on an empty trie', async t => {
+  const trie = new Trie();
+  await t.throwsAsync(
+    () => trie.prove("foo"),
+    { message(e) { return e.startsWith('cannot walk empty trie') } },
+  );
+});
+
 test('Trie: can be constructed from a single value', async t => {
   const pairs = [{ key: 'foo', value: 'bar' }]
   const trie = await Trie.fromList(pairs);
 
   t.true(trie instanceof Leaf);
+  t.false(trie.hash == null);
   t.is(trie.prefix.length, 64);
   t.is(trie.key.toString(), pairs[0].key);
   t.is(trie.value.toString(), pairs[0].value);
@@ -81,6 +96,7 @@ test('Trie: can be constructed from two values', async t => {
   const trie = await Trie.fromList(pairs);
 
   t.is(trie.size, 2);
+  t.false(trie.hash == null);
   t.false(trie instanceof Leaf);
 
   await trie.fetchChildren();
@@ -330,6 +346,7 @@ test('Trie.delete: whole trie in any order', async t => {
     const root = await trie.store.get('__root__', (_, x) => Buffer.from(x, 'hex'));
 
     t.true(root.equals(helpers.NULL_HASH));
+    t.is(trie.hash, null);
     t.is(await trie.store.size(), 1);
   }));
 });

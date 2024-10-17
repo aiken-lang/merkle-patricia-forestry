@@ -85,13 +85,13 @@ export class Trie {
    * @param {Store} [store]
    *   The trie's store, default to an in-memory store if omitted.
    */
-  constructor(store = new Store(), hash = NULL_HASH, prefix = '', size = 0) {
+  constructor(store = new Store(), hash = null, prefix = '', size = 0) {
     assertInstanceOf(Store, { store });
     this.hash = hash;
     this.prefix = prefix;
     this.size = size;
     this.store = store;
-    this.isRoot = hash === NULL_HASH;
+    this.isRoot = hash === null;
   }
 
 
@@ -140,7 +140,7 @@ export class Trie {
     if (this.isRoot) {
       await this.store.put(
         ROOT_KEY,
-        { serialise: () => this.hash.toString('hex') }
+        { serialise: () => (this.hash ?? NULL_HASH).toString('hex') }
       );
     }
 
@@ -334,16 +334,16 @@ export class Trie {
   async get(key) {
     // Convert the key into a path of nibbles
     const path = intoPath(key);
-    
+
     // Use childAt to find the node corresponding to the path
     const node = await this.childAt(path);
-    
+
     key = typeof key === 'string' ? Buffer.from(key) : key;
     // If the node is a Leaf and the key matches, return the value
     if (node instanceof Leaf && node.key.equals(key)) {
       return node.value;
     }
-  
+
     // Return undefined if no matching node is found
     return undefined;
   }
@@ -1013,7 +1013,7 @@ export class Branch extends Trie {
     function format(node, join, vertical = ' ') {
       const nibble = branches[node.hash];
 
-      const hash = formatHash(node.hash);
+      const hash = formatHash(node.hash ?? NULL_HASH);
 
       if (!(node instanceof Trie)) {
         return `\n ${join}─ ${nibble} ${hash}`;
@@ -1050,7 +1050,7 @@ export class Branch extends Trie {
     let last = tail[tail.length - 1];
     last = format(last, '└');
 
-    const rootHash = formatHash(this.hash, 2 * DIGEST_LENGTH);
+    const rootHash = formatHash(this.hash ?? NULL_HASH, 2 * DIGEST_LENGTH);
     const wall = ''.padStart(3 + DIGEST_LENGTH * 2, '═')
 
     return depth == 2
@@ -1232,7 +1232,7 @@ export class Proof {
    * @private
    */
   rewind(target, skip, children) {
-    const me = children.findIndex(x => x?.hash.equals(target.hash));
+    const me = children.findIndex(x => (x?.hash ?? NULL_HASH).equals(target.hash ?? NULL_HASH));
 
     assert(me !== -1, `target not in children`);
 
