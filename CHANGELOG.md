@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.1.0 - 2024-10-17
+
+### Added
+
+- A new function in the off-chain API:
+  [`get(key) -> Promise<Buffer|undefined>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triegetkey-stringbuffer-promisebufferundefined)
+
+### Changed
+
+- The `.hash` property of empty tries now returns `null` in the off-chain library, instead of a bytes buffer filled with zeroes. This is to avoid a confusion where one would be encouraged to construct an empty trie from such a root.
+
+
 ## v2.0.0 - 2024-09-06
 
 ### Added

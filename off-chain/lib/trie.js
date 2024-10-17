@@ -85,13 +85,13 @@ export class Trie {
    * @param {Store} [store]
    *   The trie's store, default to an in-memory store if omitted.
    */
-  constructor(store = new Store(), hash = NULL_HASH, prefix = '', size = 0) {
+  constructor(store = new Store(), hash = null, prefix = '', size = 0) {
     assertInstanceOf(Store, { store });
     this.hash = hash;
     this.prefix = prefix;
     this.size = size;
     this.store = store;
-    this.isRoot = hash === NULL_HASH;
+    this.isRoot = hash === null;
   }
 
 
@@ -140,7 +140,7 @@ export class Trie {
     if (this.isRoot) {
       await this.store.put(
         ROOT_KEY,
-        { serialise: () => this.hash.toString('hex') }
+        { serialise: () => (this.hash ?? NULL_HASH).toString('hex') }
       );
     }
 
@@ -301,6 +301,10 @@ export class Trie {
    * @return {Promise<Trie|undefined>} A sub-trie at the given path, or nothing.
    */
   async childAt(path) {
+    if (this.size === 0) {
+      return undefined;
+    }
+
     const loop = async (task, ix) => {
       const trie = await task;
 
@@ -323,6 +327,30 @@ export class Trie {
     return loop(Promise.resolve(this), 0);
   }
 
+  /**
+   * Retrieves the value at the given key from the Trie.
+   *
+   * @param {Buffer|string} key
+   *   The key to search for. Strings are treated as UTF-8 byte buffers.
+   * @returns {Promise<Buffer|undefined>}
+   *   The value at the specified key, or `undefined` if the key is not found.
+   */
+  async get(key) {
+    // Convert the key into a path of nibbles
+    const path = intoPath(key);
+
+    // Use childAt to find the node corresponding to the path
+    const node = await this.childAt(path);
+
+    key = typeof key === 'string' ? Buffer.from(key) : key;
+    // If the node is a Leaf and the key matches, return the value
+    if (node instanceof Leaf && node.key.equals(key)) {
+      return node.value;
+    }
+
+    // Return undefined if no matching node is found
+    return undefined;
+  }
 
   /**
    * Creates a proof of inclusion of a given key in the trie.
@@ -989,7 +1017,7 @@ export class Branch extends Trie {
     function format(node, join, vertical = ' ') {
       const nibble = branches[node.hash];
 
-      const hash = formatHash(node.hash);
+      const hash = formatHash(node.hash ?? NULL_HASH);
 
       if (!(node instanceof Trie)) {
         return `\n ${join}─ ${nibble} ${hash}`;
@@ -1026,7 +1054,7 @@ export class Branch extends Trie {
     let last = tail[tail.length - 1];
     last = format(last, '└');
 
-    const rootHash = formatHash(this.hash, 2 * DIGEST_LENGTH);
+    const rootHash = formatHash(this.hash ?? NULL_HASH, 2 * DIGEST_LENGTH);
     const wall = ''.padStart(3 + DIGEST_LENGTH * 2, '═')
 
     return depth == 2
@@ -1144,8 +1172,6 @@ export class Branch extends Trie {
       blob.size,
       store,
     );
-
-    obj.self;
   }
 }
 
@@ -1208,7 +1234,7 @@ export class Proof {
    * @private
    */
   rewind(target, skip, children) {
-    const me = children.findIndex(x => x?.hash.equals(target.hash));
+    const me = children.findIndex(x => (x?.hash ?? NULL_HASH).equals(target.hash ?? NULL_HASH));
 
     assert(me !== -1, `target not in children`);
 
@@ -1269,10 +1295,6 @@ export class Proof {
    *   A resulting hash as a byte buffer, to be compared with a known root.
    */
   verify(includingItem = true) {
-    if (!includingItem && this.#steps.length == 0) {
-      return NULL_HASH;
-    }
-
     const loop = (cursor, ix) => {
       const step = this.#steps[ix];
 

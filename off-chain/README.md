@@ -176,6 +176,18 @@ console.log(trie);
 
 ### Accessing
 
+#### `trie.get(key: string|Buffer): Promise<Buffer|undefined>`
+
+You can efficiently fetch any value from the trie from its key using the `trie.get` method.
+
+```js
+await trie.get('cherries');
+// 🍒
+
+await trie.get('cherrie');
+// undefined
+```
+
 #### `trie.childAt(path: string): Promise<Trie|undefined>`
 
 You can retrieve any child from the trie at a given _path_. A _path_ is a sequence of hexadecimal digits (a.k.a nibbles) given by the hash digest (blake2b-256) of the key, encoded in base16.
