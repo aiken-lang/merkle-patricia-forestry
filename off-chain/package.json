@@ -28,7 +28,7 @@
   "license": "MPL-2.0",
   "scripts": {
     "test": "ava",
-    "build": "tsup lib/index.ts --format esm,cjs --dts",
+    "build": "tsup lib/index.js --format esm,cjs --dts",
     "docs": "jsdoc lib/* -d docs"
   },
   "devDependencies": {

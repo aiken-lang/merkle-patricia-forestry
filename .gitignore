@@ -1,6 +1,7 @@
 build/
 on-chain/docs/
 off-chain/docs/
+off-chain/dist/
 examples
 
 # Logs
