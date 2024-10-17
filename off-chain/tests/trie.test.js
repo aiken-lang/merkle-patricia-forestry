@@ -279,6 +279,31 @@ test('Trie.insert: already inserted', async t => {
   t.deepEqual(await trie.save(), sameTrie);
 });
 
+// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------- Trie.get
+// -----------------------------------------------------------------------------
+
+test('Trie.get: empty trie', async t => {
+  const trie = new Trie();
+  t.is(await trie.get("foo"), undefined);
+});
+
+test('Trie.get: direct leaf', async t => {
+  const trie = await Trie.fromList([{ key: 'foo', value: '14' }]);
+  t.true(trie instanceof Leaf);
+
+  t.is((await trie.get('foo')).toString(), '14');
+  t.is(await trie.get('fo'), undefined);
+  t.is(await trie.get('fooo'), undefined);
+});
+
+test('Trie.get: fruits', async t => {
+  const trie = await Trie.fromList(FRUITS_LIST);
+
+  t.true(Buffer.from('🥝').equals(await trie.get('kiwi[uid: 0]')));
+  t.true(Buffer.from('🍌').equals(await trie.get('banana[uid: 218]')));
+  t.is(await trie.get('banana[uid: 219]'), undefined);
+});
 
 // -----------------------------------------------------------------------------
 // ----------------------------------------------------------------- Trie.delete

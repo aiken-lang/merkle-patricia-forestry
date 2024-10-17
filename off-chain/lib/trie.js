@@ -301,6 +301,10 @@ export class Trie {
    * @return {Promise<Trie|undefined>} A sub-trie at the given path, or nothing.
    */
   async childAt(path) {
+    if (this.size === 0) {
+      return undefined;
+    }
+
     const loop = async (task, ix) => {
       const trie = await task;
 
