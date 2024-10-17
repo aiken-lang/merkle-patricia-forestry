@@ -5,7 +5,7 @@
 ### Added
 
 - A new function in the off-chain API:
-  [`get(key) -> Promise<Buffer|undefined>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#get-key-promise-buffer-undefined)
+  [`get(key) -> Promise<Buffer|undefined>`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triegetkey-stringbuffer-promisebufferundefined)
 
 ### Changed
 

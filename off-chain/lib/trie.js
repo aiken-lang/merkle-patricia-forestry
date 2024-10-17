@@ -1172,8 +1172,6 @@ export class Branch extends Trie {
       blob.size,
       store,
     );
-
-    obj.self;
   }
 }
 
@@ -1297,10 +1295,6 @@ export class Proof {
    *   A resulting hash as a byte buffer, to be compared with a known root.
    */
   verify(includingItem = true) {
-    if (!includingItem && this.#steps.length == 0) {
-      return NULL_HASH;
-    }
-
     const loop = (cursor, ix) => {
       const step = this.#steps[ix];
 
