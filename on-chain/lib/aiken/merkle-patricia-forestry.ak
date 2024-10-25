@@ -149,7 +149,7 @@ pub fn insert(
 /// #### Fails when
 ///
 /// - the [Proof](#Proof) is invalid
-/// - there's already an element in the trie at the given key
+/// - there is no element in the trie at the given key
 pub fn delete(
   self: MerklePatriciaForestry,
   key: ByteArray,
