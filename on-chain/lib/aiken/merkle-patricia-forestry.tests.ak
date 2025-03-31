@@ -183,6 +183,41 @@ test example_has() {
   }
 }
 
+test example_not_has() {
+  and {
+    mpf.not_has(without_apple(), apple, proof_apple()),
+    mpf.not_has(without_apricot(), apricot, proof_apricot()),
+    mpf.not_has(without_banana(), banana, proof_banana()),
+    mpf.not_has(without_blueberry(), blueberry, proof_blueberry()),
+    mpf.not_has(without_cherry(), cherry, proof_cherry()),
+    mpf.not_has(without_coconut(), coconut, proof_coconut()),
+    mpf.not_has(without_cranberry(), cranberry, proof_cranberry()),
+    mpf.not_has(without_fig(), fig, proof_fig()),
+    mpf.not_has(without_grapefruit(), grapefruit, proof_grapefruit()),
+    mpf.not_has(without_grapes(), grapes, proof_grapes()),
+    mpf.not_has(without_guava(), guava, proof_guava()),
+    mpf.not_has(without_kiwi(), kiwi, proof_kiwi()),
+    mpf.not_has(without_kumquat(), kumquat, proof_kumquat()),
+    mpf.not_has(without_lemon(), lemon, proof_lemon()),
+    mpf.not_has(without_lime(), lime, proof_lime()),
+    mpf.not_has(without_mango(), mango, proof_mango()),
+    mpf.not_has(without_orange(), orange, proof_orange()),
+    mpf.not_has(without_papaya(), papaya, proof_papaya()),
+    mpf.not_has(without_passion(), passion, proof_passion()),
+    mpf.not_has(without_peach(), peach, proof_peach()),
+    mpf.not_has(without_pear(), pear, proof_pear()),
+    mpf.not_has(without_pineapple(), pineapple, proof_pineapple()),
+    mpf.not_has(without_plum(), plum, proof_plum()),
+    mpf.not_has(without_pomegranate(), pomegranate, proof_pomegranate()),
+    mpf.not_has(without_raspberry(), raspberry, proof_raspberry()),
+    mpf.not_has(without_strawberry(), strawberry, proof_strawberry()),
+    mpf.not_has(without_tangerine(), tangerine, proof_tangerine()),
+    mpf.not_has(without_tomato(), tomato, proof_tomato()),
+    mpf.not_has(without_watermelon(), watermelon, proof_watermelon()),
+    mpf.not_has(without_yuzu(), yuzu, proof_yuzu()),
+  }
+}
+
 test example_insert() {
   and {
     mpf.insert(without_apple, apple, "🍎", proof_apple) == trie,
@@ -373,6 +408,13 @@ test example_has_mutate_proof_apple(
 ) fail {
   let proof = proof_apple |> mutate(mutation)
   mpf.has(trie, apple, "🍎", proof)
+}
+
+test example_not_has_mutate_proof_apple(
+  mutation via fuzz_proof_mutation(proof_apple()),
+) fail {
+  let proof = proof_apple() |> mutate(mutation)
+  mpf.not_has(without_apple(), apple, proof)
 }
 
 test example_insert_mutate_proof_apple(
