@@ -86,6 +86,56 @@ test insert_bitcoin_block_845602() {
 }
 
 // -----------------------------------------------------------------------------
+// ------------------------------------------------------------------ Regression
+// -----------------------------------------------------------------------------
+
+test phil() {
+  let proof =
+    [
+      Branch {
+        skip: 0,
+        neighbors: #"d0feb802cc999c500ec58b8e78bdb1b11bcb8e217d404c2cfb416669a6b2c240cd0c58152bf064f0c7834dd72f69d12651739b32caaa3c986a87937f125b500f1426fccf2a456bce3c25b43206d9b429d56515580d086a959ca730325411b3aada6ac4d7221f787b97e1ce677fdadc412e824a9816281b1259b91addeb37bb2c",
+      },
+      Branch {
+        skip: 0,
+        neighbors: #"098745f495c99b7627f559ac8ed8165e2392e2261ef8990291f13705adf78fcf3dcca881d4b45aabe746e7041f743baaa831029e7890df9587858d8be5dce648e02f31fe2936417a393df8def15d7d0c021a66cdb33c3fdda941ae70614913cb116fd5e6c499b71e229b88f5106975cbe83a8c44d3619541d7ddd7eae0a355bc",
+      },
+      Branch {
+        skip: 0,
+        neighbors: #"9732c3266e468dd27c4bd16af5a6e60c1f556bf91700f51554cfa33aa26b8d30f33c27ab7c5c85ef006c78f56ecd7e8c77c5fadd7910e9b178801d554f244977026104fc4aede0864d405db792691c4e4534b06ae7f58366b640f13ecfa549afa046a157d2e9b6c0793a506942eb8ff50dfeb7c5e7a2a51814c4b3a4d6af6fa0",
+      },
+      Branch {
+        skip: 0,
+        neighbors: #"5f3065e998b5fa89bb33d9204546c5dba2b075adc542688dcc1773a490fa739ac69ff52c5f575e9f1912664c1ebef2f9498775350b0077a6b59fe012861c3715657146a239aaea12b3091054e5846771bba6f721b1835d025fa08d1fc5c9b1c40000000000000000000000000000000000000000000000000000000000000000",
+      },
+      Leaf {
+        skip: 1,
+        key: #"2b5b0ba7a99e17d9fde58f14dee61cccda9e3e9627b2ba2732ebed551ea9eaa4",
+        value: #"3657998959985b7b75c734eb5b49d18cae9b353d00d811cb2c24ed6ed17b23d9",
+      },
+      Leaf {
+        skip: 0,
+        key: #"2b5b063719f4b7644c71adef1439c9aa78d34e684677dd61db0adffcc21797ec",
+        value: #"4e397303e05277d98701446ee62f6f02bc013721fc12efba7300fb51ea935f9f",
+      },
+    ]
+
+  let new_root =
+    insert(
+      from_root(
+        #"409bc367bec001f8c8af45fb86239d1f69763cb86e8e134c66bba15426cf176e",
+      ),
+      #"198d70e41146654a69e08c6682310a8c35816c8584431915a0eee4a62d39eda0",
+      #"9e36f867a374be",
+      proof,
+    )
+
+  new_root == from_root(
+    #"f19b7893c0ec34703790dadb8e3257196dcf7aabfa9426d68adf36a31a94ad9a",
+  )
+}
+
+// -----------------------------------------------------------------------------
 // ---------------------------------------------------------------------- fruits
 // -----------------------------------------------------------------------------
 
