@@ -116,6 +116,22 @@ pub fn has(
   including(key, value, proof) == self.root
 }
 
+/// since | <code>1.0.0</code>
+/// ---   | ---
+///
+/// Test whether an element is not present in the trie. This requires
+/// a [Proof](#Proof) of inclusion for the element. The latter can be
+/// obtained off-chain from the whole trie containing the element.
+///
+/// Returns `False` when the element is in the tree.
+pub fn not_has(
+  self: MerklePatriciaForestry,
+  key: ByteArray,
+  proof: Proof,
+) -> Bool {
+  excluding(key, proof) == self.root
+}
+
 // # Modifying
 
 /// since | <code>1.0.0</code>
