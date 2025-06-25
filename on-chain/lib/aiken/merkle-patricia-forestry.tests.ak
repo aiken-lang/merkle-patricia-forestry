@@ -121,8 +121,8 @@ test phil() {
     ]
 
   let new_root =
-    insert(
-      from_root(
+    mpf.insert(
+      mpf.from_root(
         #"409bc367bec001f8c8af45fb86239d1f69763cb86e8e134c66bba15426cf176e",
       ),
       #"198d70e41146654a69e08c6682310a8c35816c8584431915a0eee4a62d39eda0",
@@ -130,7 +130,7 @@ test phil() {
       proof,
     )
 
-  new_root == from_root(
+  new_root == mpf.from_root(
     #"f19b7893c0ec34703790dadb8e3257196dcf7aabfa9426d68adf36a31a94ad9a",
   )
 }
