@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.1 - UNRELEASED
+## v2.0.1 - 2025-06-25
 
 - Fixed proof verification on-chain for leaf fork with non-zero common prefix.
 
