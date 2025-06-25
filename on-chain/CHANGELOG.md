@@ -2,7 +2,17 @@
 
 ## v2.0.1 - 2025-06-25
 
+### Added
+
+N/A
+
+### Changed
+
 - Fixed proof verification on-chain for leaf fork with non-zero common prefix.
+
+### Removed
+
+N/A
 
 ## v2.0.0 - 2024-09-06
 
