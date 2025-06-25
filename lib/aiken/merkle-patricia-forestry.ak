@@ -321,7 +321,7 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       let neighbor =
         Neighbor {
           prefix: suffix(key, nextCursor),
-          nibble: nibble(key, cursor),
+          nibble: nibble(key, nextCursor - 1),
           root: value,
         }
 

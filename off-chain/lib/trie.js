@@ -304,6 +304,10 @@ export class Trie {
     const loop = async (task, ix) => {
       const trie = await task;
 
+      if (ix >= path.length) {
+        return trie;
+      }
+
       if (trie instanceof Leaf) {
         return trie.prefix.startsWith(path.slice(ix)) ? trie : undefined;
       }
