@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.0 - UNRELEASED
+
+- Allow [`childAt`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triechildatpath-string-promisetrieundefined) to return with intermediate sub-tree when passing an incomplete path.
+
 ## v1.2.0 - 2024-10-17
 
 ### Added

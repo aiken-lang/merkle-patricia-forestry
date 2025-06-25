@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.1 - UNRELEASED
+
+- Fixed proof verification on-chain for leaf fork with non-zero common prefix.
+
 ## v2.0.0 - 2024-09-06
 
 ### Added
@@ -8,17 +12,11 @@ N/A
 
 ### Changed
 
-#### on-chain
-
 - Requires `aiken >= 1.1.0`.
 
 - Requires `aiken-lang/stdlib >= 2.0.0` && `aiken-lang/stdlib < 3.0.0`.
 
 - Creating an empty trie is no longer a function `empty()` but a constant `empty`.
-
-#### off-chain
-
-N/A
 
 ### Removed
 
