@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.1 - 2025-06-25
+
+### Added
+
+N/A
+
+### Changed
+
+#### on-chain
+
+- Fixed proof verification on-chain for leaf fork with non-zero common prefix.
+
+#### off-chain
+
+- Allow `childAt` to return with intermediate sub-tree when passing an incomplete path.
+
+### Removed
+
+N/A
+
 ## v1.1.0 - 2024-07-23
 
 ### Added
