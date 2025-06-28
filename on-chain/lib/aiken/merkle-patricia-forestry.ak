@@ -245,7 +245,7 @@ pub type Neighbor {
 /// the target trie.
 ///
 /// This can be used to check for membership of an element in a trie.
-pub fn including(key: ByteArray, value: ByteArray, proof: Proof) -> ByteArray {
+fn including(key: ByteArray, value: ByteArray, proof: Proof) -> ByteArray {
   do_including(blake2b_256(key), blake2b_256(value), 0, proof)
 }
 
@@ -294,7 +294,7 @@ fn do_including(
 /// walking the proof without including the element.
 ///
 /// So this mainly changes the last step.
-pub fn excluding(key: ByteArray, proof: Proof) -> ByteArray {
+fn excluding(key: ByteArray, proof: Proof) -> ByteArray {
   do_excluding(blake2b_256(key), 0, proof)
 }
 
