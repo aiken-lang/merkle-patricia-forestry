@@ -1379,7 +1379,7 @@ export class Proof {
             } else {
               // For skip > 0, we need to reconstruct the original neighbor node
               // before the fork was created. The original node had the full prefix:
-              // (common prefix from skip) + (neighbor prefix + neighbor nibble)
+              // (common prefix from skip) + (neighbor nibble) + (neighbor's current prefix)
               // Match onchain: bytearray.concat(nibbles(path, cursor, cursor + skip), bytearray.push(neighbor.prefix, neighbor.nibble))
               const skippedPath = nibbles(this.#path.slice(cursor, cursor + step.skip));
               const nibblePlusPrefix = Buffer.concat([
