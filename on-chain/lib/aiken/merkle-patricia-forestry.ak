@@ -308,10 +308,23 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
-    [Fork { neighbor, .. }] -> {
-      let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
-      combine(prefix, neighbor.root)
-    }
+    [Fork { skip, neighbor }] ->
+      if skip == 0 {
+        // Original logic that works for skip = 0
+        let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
+        combine(prefix, neighbor.root)
+      } else {
+        // nibble + prefix + root 
+        // For skip > 0, we need to reconstruct the original neighbor node
+        // before the fork was created. The original node had the full prefix:
+        // (common prefix from skip) + (neighbor nibble) + (neighbor's current prefix)
+        let originalPrefix =
+          bytearray.concat(
+            nibbles(path, cursor, cursor + skip),
+            bytearray.push(neighbor.prefix, neighbor.nibble),
+          )
+        combine(originalPrefix, neighbor.root)
+      }
 
     [Fork { skip, neighbor }, ..steps] -> {
       let nextCursor = cursor + 1 + skip
