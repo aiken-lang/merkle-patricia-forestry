@@ -308,23 +308,43 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
-    [Fork { skip, neighbor }] ->
-      if skip == 0 {
-        // Original logic that works for skip = 0
-        let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
-        combine(prefix, neighbor.root)
-      } else {
-        // nibble + prefix + root 
-        // For skip > 0, we need to reconstruct the original neighbor node
-        // before the fork was created. The original node had the full prefix:
-        // (common prefix from skip) + (neighbor nibble) + (neighbor's current prefix)
-        let originalPrefix =
+    [Fork { skip, neighbor }] -> {
+      let neighbor_prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
+      let prefix =
+        if skip == 0 {
+          neighbor_prefix
+        } else {
+          // For skip > 0, we need to reconstruct the original neighbor node
+          // before the fork was created. The original node had the full prefix:
+          //
+          // (common prefix) + (neighbor nibble) + (neighbor's current prefix)
+          //
+          // For example, imagine we're trying to reconstruct the trie on the left,
+          // from a proof on {accc -> 2}
+          //
+          //     <aaa>                          <a>
+          // ┌─────┴─────┐      =>       ┌───────┴──────┐
+          // a<>         b<>             a<a>           c<cc>
+          // │           │               │              │
+          // │           │           ┌───┴────┐         │
+          // │           │           a<>      b<>       │
+          // │           │           │        │         │
+          // 0           1           0        1         2
+          //
+          // Here, we have:
+          //
+          // - common prefix = 'a'
+          // - neighbor.nibble = 'a'
+          // - neighbor's current prefix = 'a'
+          //
+          // Which we can use reconstruct the original prefix of the branch to 'aaa'.
           bytearray.concat(
             nibbles(path, cursor, cursor + skip),
-            bytearray.push(neighbor.prefix, neighbor.nibble),
+            neighbor_prefix,
           )
-        combine(originalPrefix, neighbor.root)
-      }
+        }
+      combine(prefix, neighbor.root)
+    }
 
     [Fork { skip, neighbor }, ..steps] -> {
       let nextCursor = cursor + 1 + skip

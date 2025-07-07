@@ -1217,13 +1217,14 @@ export class Proof {
    *
    * @param {Buffer} path
    * @param {Buffer|undefined} value
+   * @param {Array<Object>} [steps]
    * @return {Proof}
    * @private
    */
-  constructor(path, value) {
+  constructor(path, value, steps = []) {
     this.#path = path;
     this.#value = value;
-    this.#steps = [];
+    this.#steps = steps;
   }
 
   /** Add a step in front of the proof. The proof is built recursively from the
@@ -1369,26 +1370,22 @@ export class Proof {
 
         case Proof.#TYPE_FORK: {
           if (!includingItem && isLastStep) {
-            if (step.skip === 0) {
-              // Original logic that works for skip = 0
-              const prefix = [
-                Buffer.from([step.neighbor.nibble]),
-                step.neighbor.prefix,
-              ];
-              return digest(Buffer.concat([...prefix, step.neighbor.root])); // nibble + prefix + root
-            } else {
-              // For skip > 0, we need to reconstruct the original neighbor node
-              // before the fork was created. The original node had the full prefix:
-              // (common prefix from skip) + (neighbor nibble) + (neighbor's current prefix)
-              // Match onchain: bytearray.concat(nibbles(path, cursor, cursor + skip), bytearray.push(neighbor.prefix, neighbor.nibble))
-              const skippedPath = nibbles(this.#path.slice(cursor, cursor + step.skip));
-              const nibblePlusPrefix = Buffer.concat([
-                Buffer.from([step.neighbor.nibble]),
-                step.neighbor.prefix,
-              ]);
-              const originalPrefix = Buffer.concat([skippedPath, nibblePlusPrefix]);
-              return digest(Buffer.concat([originalPrefix, step.neighbor.root]));
-            }
+            const neighborPrefix = [
+              Buffer.from([step.neighbor.nibble]),
+              step.neighbor.prefix,
+            ];
+
+            // For skip > 0, we need to reconstruct the original neighbor node
+            // before the fork was created. The original node had the full prefix:
+            // (common prefix) + (neighbor nibble) + (neighbor's current prefix)
+            const prefix = step.skip === 0
+              ? neighborPrefix
+              : [
+                  nibbles(this.#path.slice(cursor, cursor + step.skip)),
+                  ...neighborPrefix,
+                ];
+
+            return digest(Buffer.concat([...prefix, step.neighbor.root]));
           }
 
           assert(step.neighbor.nibble !== thisNibble);
