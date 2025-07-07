@@ -286,6 +286,35 @@ proofTangerine.toJSON();
 // ]
 ```
 
+#### `proof.fromJSON(key, value, steps): Proof`
+
+Re-construct a JavaScript Proof object from a serialized JSON value. This requires providing the original key/value pair.
+
+```js
+const proofTangerine = Proof.fronJSON(
+  'tangerine',
+  '🍊',
+  [
+    {
+      type: 'branch',
+      skip: 0,
+      neighbors: '17a27bc4ce61078d26372800d331d6b8c4b00255080be66977c78b1554aabf8985c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f17
+  22acc3b10eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610000000000000000000000000000000000000000000000000000000000000000
+  '
+    },
+    {
+      type: 'leaf',
+      skip: 0,
+      neighbor: {
+        key: '9702e39845bfd6e0d0a5b6cb4a3a1c25262528c11bcff857867a50a0670e3a28',
+        value: 'b5898c51c32083e91b8c18c735d0ba74e08f964a20b1639c189d1e8704b78a09'
+      }
+    }
+  ]
+);
+```
+
+
 #### `proof.toCBOR(): Buffer`
 
 JSON is cool, but proofs are ultimately meant to be passed on-chain as redeemer or datum. Thus, we provide a method `.toCBOR` to serialise a proof into a format compatible with the on-chain expectations.
