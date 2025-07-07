@@ -1429,6 +1429,54 @@ export class Proof {
     return loop(0, 0);
   }
 
+  /** Deserialize a proof from JSON.
+   *
+   * @param {Buffer|string} path
+   *   The original key being proven. Strings are treated as UTF-8 byte buffers.
+   * @param {Buffer|string} value
+   *   The original value being proven. Strings are treated as UTF-8 byte buffers.
+   * @param {Array<Object>} steps
+   *   The steps serialized to JSON.
+   * @return {Proof}
+   */
+  static fromJSON(key, value, steps) {
+    return new Proof(intoPath(key), value, steps.map(step => {
+      switch (step.type) {
+        case Proof.#TYPE_LEAF.description:
+          return {
+            type: Proof.#TYPE_LEAF,
+            skip: step.skip,
+            neighbor: {
+              key: Buffer.from(step.neighbor.key, 'hex'),
+              value: Buffer.from(step.neighbor.value, 'hex'),
+            }
+          };
+        case Proof.#TYPE_BRANCH.description:
+          const neighbors = [];
+          for (let i = 0; i < step.neighbors.length; i += 2 * DIGEST_LENGTH) {
+            const hash = step.neighbors.slice(i, i + 2 * DIGEST_LENGTH);
+            neighbors.push(Buffer.from(hash, 'hex'));
+          }
+          return {
+            type: Proof.#TYPE_BRANCH,
+            skip: step.skip,
+            neighbors,
+          };
+        case Proof.#TYPE_FORK.description:
+          return {
+            type: Proof.#TYPE_FORK,
+            skip: step.skip,
+            neighbor: {
+              prefix: Buffer.from(step.neighbor.prefix, 'hex'),
+              nibble: step.neighbor.nibble,
+              root: Buffer.from(step.neighbor.root, 'hex'),
+            },
+          };
+        default:
+          throw new Error(`unknown step type ${step.type}`);
+      }
+    }));
+  }
 
   /** Serialise the proof as a portable JSON.
    *
