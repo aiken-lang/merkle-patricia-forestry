@@ -1,13 +1,16 @@
+import * as cp from 'node:child_process';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { inspect } from 'node:util';
+import { randomBytes } from 'node:crypto';
 
 import test from 'ava';
 
 import { Store } from '../lib/store.js';
 import { Leaf, Branch, Proof, Trie } from '../lib/trie.js';
 import * as helpers from '../lib/helpers.js';
+import * as cbor from '../lib/cbor.js';
 
 
 const FRUITS_LIST = [
@@ -684,7 +687,6 @@ test('Trie: cannot alter non-membership proof', async t => {
   t.false(proof.verify(false).equals(trie.hash));
 });
 
-
 // -----------------------------------------------------------------------------
 // ---------------------------------------------------------------- Proof.toJSON
 // -----------------------------------------------------------------------------
@@ -773,6 +775,70 @@ test('Proof.toAiken (kumquat)', async t => {
 });
 
 // -----------------------------------------------------------------------------
+// --------------------------------------------------------------- Fuzzy testing
+// -----------------------------------------------------------------------------
+
+const FUZZ_MAX_ITERATION = 500;
+
+const aiken = {
+  insert: aikenFFI("insert"),
+  remove: aikenFFI("delete"),
+};
+
+test('Fuzz', async t => {
+  const trie = new Trie();
+
+  for (let i = 0; i < FUZZ_MAX_ITERATION; i += 1) {
+    const key = randomBytes(2);
+    const value = randomBytes(4);
+
+    let previousRoot = trie.hash;
+
+    const oldValue = await trie.get(key);
+
+    if (oldValue !== undefined) {
+      // Key already exist, we extract a proof, and delete it.
+      const proof = await trie.prove(key);
+      await trie.delete(key);
+      t.true(proof.verify(true).equals(previousRoot))
+      t.true(trie.hash === null || proof.verify(false).equals(trie.hash))
+
+      // Also check that the on-chain code can compute the removal
+      t.true(
+        aiken.remove(previousRoot, key, oldValue, proof.toUPLC())
+          .equals(trie.hash)
+      );
+
+      previousRoot = trie.hash;
+
+      // Add the new value.
+      await trie.insert(key, value);
+      proof.setValue(value);
+      t.true(proof.verify(true).equals(trie.hash))
+      t.true(
+        aiken.insert(previousRoot, key, value, proof.toUPLC())
+          .equals(trie.hash)
+      );
+    } else {
+      // Key doesn't exist, we add it.
+      await trie.insert(key, value);
+
+      // Check both inclusion and exclusion proofs for this element
+      const proof = await trie.prove(key);
+      t.true(previousRoot === null || proof.verify(false).equals(previousRoot));
+      t.true(proof.verify(true).equals(trie.hash));
+
+      // Also check that the on-chain code can compute the insertion.
+      t.true(
+        aiken.insert(previousRoot ?? helpers.NULL_HASH, key, value, proof.toUPLC())
+          .equals(trie.hash)
+      );
+    }
+  }
+});
+
+
+// -----------------------------------------------------------------------------
 // ---------------------------------------------------------------- Test Helpers
 // -----------------------------------------------------------------------------
 
@@ -791,4 +857,23 @@ function shuffle(xs) {
 
 function tmpFilename() {
   return path.join(os.tmpdir(), `merkle-patricia-forest-db_${randomBytes(8).toString('hex')}`);
+}
+
+function aikenFFI(fnName) {
+  let cmd = `aiken export --module aiken/merkle_patricia_forestry --name ${fnName}_ffi 2>/dev/null`;
+  const opts = { cwd: path.join(import.meta.dirname, "../../on-chain") };
+  const fn = JSON.parse(cp.execSync(cmd, opts)).compiledCode;
+  const filename = path.join(os.tmpdir(), `${fnName}_ffi.cbor`);
+  fs.writeFileSync(filename, fn);
+  return function(...args) {
+    args = args.map(arg => {
+      if (arg instanceof Buffer) {
+          return `'(con data (B #${arg.toString('hex') }))'`;
+      }
+      return `'${arg}'`;
+    });
+    cmd = `aiken uplc eval --cbor ${filename} ${args.join(" ")}`
+    const result = JSON.parse(cp.execSync(cmd, opts)).result;
+    return Buffer.from(result.slice(21, 86), 'hex');
+  }
 }

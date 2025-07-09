@@ -381,10 +381,12 @@ export class Trie {
         throw e;
       }
 
+      /* c8 ignore next 3 */
       if (!(e instanceof assert.AssertionError) ) {
         throw e;
       }
 
+      /* c8 ignore next 3 */
       if (!(e.message ?? "").includes("not in trie")) {
         throw e;
       }
@@ -399,6 +401,7 @@ export class Trie {
           assert(hash.equals(this.hash));
           return proof;
         });
+      /* c8 ignore next 4 */
       } catch (e) {
         await this.save();
         throw e;
@@ -440,6 +443,7 @@ export class Trie {
         return Leaf.deserialise(hash, blob, store);
       case 'Branch':
         return Branch.deserialise(hash, blob, store);
+      /* c8 ignore next 2 */
       default:
         throw new Error(`unexpected blob to deserialise: ${blob?.__kind}: ${blob}`);
     }
@@ -1357,6 +1361,7 @@ export class Proof {
           });
         }
 
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }
@@ -1409,6 +1414,7 @@ export class Proof {
               root: Buffer.from(step.neighbor.root, 'hex'),
             },
           };
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }
@@ -1457,6 +1463,34 @@ export class Proof {
     return this.#steps.map(step => serialisers[step.type](step));
   }
 
+  toUPLC() {
+    const steps = this.toJSON().map(step => {
+        switch (step.type) {
+          case Proof.#TYPE_BRANCH.description: {
+            const skip = `I ${step.skip}`;
+            const neighbors = `B #${step.neighbors}`;
+            return `Constr 0 [${skip}, ${neighbors}]`;
+          }
+          case Proof.#TYPE_FORK.description: {
+            const skip = `I ${step.skip}`;
+            const nibble = `I ${step.neighbor.nibble}`;
+            const prefix = `B #${step.neighbor.prefix}`;
+            const root = `B #${step.neighbor.root}`;
+            const neighbors = `Constr 0 [${nibble}, ${prefix}, ${root}]`;
+            return `Constr 1 [${skip}, ${neighbors}]`;
+          }
+          case Proof.#TYPE_LEAF.description: {
+            const skip = `I ${step.skip}`;
+            const key = `B #${step.neighbor.key}`;
+            const value = `B #${step.neighbor.value}`;
+            return `Constr 2 [${skip}, ${key}, ${value}]`;
+          }
+        }
+    });
+
+    return `(con data (List [${steps.join(", ")}]))`;
+  }
+
 
   /** Serialise the proof as a portable CBOR, ready to be decoded on-chain.
    *
@@ -1503,6 +1537,7 @@ export class Proof {
               cbor.end(),
             ));
           }
+          /* c8 ignore next 2 */
           default:
             throw new Error(`unknown step type ${step.type}`);
         }
@@ -1529,6 +1564,7 @@ export class Proof {
         case Proof.#TYPE_LEAF.description: {
           return `  Leaf { skip: ${step.skip}, key: #"${step.neighbor.key}", value: #"${step.neighbor.value}" },\n`
         }
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }

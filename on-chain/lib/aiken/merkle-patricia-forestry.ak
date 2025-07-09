@@ -139,6 +139,17 @@ pub fn insert(
   MerklePatriciaForestry { root: including(key, value, proof) }
 }
 
+/// A version of 'insert' that unwraps the opaque arguments, to allow being exported.
+fn insert_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect excluding(key, proof) == self
+  including(key, value, proof)
+}
+
 /// since | <code>1.0.0</code>
 /// ---   | ---
 ///
@@ -158,6 +169,17 @@ pub fn delete(
 ) -> MerklePatriciaForestry {
   expect including(key, value, proof) == self.root
   MerklePatriciaForestry { root: excluding(key, proof) }
+}
+
+/// A version of 'delete' that unwraps the opaque arguments, to allow being exported.
+pub fn delete_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect including(key, value, proof) == self
+  excluding(key, proof)
 }
 
 /// since          | <code>1.1.0</code>
