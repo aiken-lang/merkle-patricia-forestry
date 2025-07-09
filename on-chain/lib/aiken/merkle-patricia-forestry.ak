@@ -259,25 +259,25 @@ fn do_including(
     [] -> combine(suffix(path, cursor), value)
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_including(path, value, nextCursor + 1, steps)
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_including(path, value, nextCursor + 1, steps)
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
 
     [Leaf { skip, key, value: neighborValue }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_including(path, value, nextCursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor),
-          nibble: nibble(key, nextCursor - 1),
+          prefix: suffix(key, nextCursor + 1),
+          nibble: nibble(key, nextCursor),
           root: neighborValue,
         }
 
@@ -303,8 +303,8 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
     [] -> null_hash
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_excluding(path, nextCursor + 1, steps)
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
@@ -347,21 +347,21 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_excluding(path, nextCursor + 1, steps)
       do_fork(path, cursor, nextCursor, root, neighbor)
     }
 
     [Leaf { key, value, .. }] -> combine(suffix(key, cursor), value)
 
     [Leaf { skip, key, value }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
+      let nextCursor = cursor + skip
+      let root = do_excluding(path, nextCursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor),
-          nibble: nibble(key, nextCursor - 1),
+          prefix: suffix(key, nextCursor + 1),
+          nibble: nibble(key, nextCursor),
           root: value,
         }
 
@@ -381,9 +381,9 @@ fn do_branch(
   root: ByteArray,
   neighbors: ByteArray,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor - 1)
+  let branch = nibble(path, nextCursor)
 
-  let prefix = nibbles(path, cursor, nextCursor - 1)
+  let prefix = nibbles(path, cursor, nextCursor)
 
   combine(
     prefix,
@@ -405,9 +405,9 @@ fn do_fork(
   root: ByteArray,
   neighbor: Neighbor,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor - 1)
+  let branch = nibble(path, nextCursor)
 
-  let prefix = nibbles(path, cursor, nextCursor - 1)
+  let prefix = nibbles(path, cursor, nextCursor)
 
   expect branch != neighbor.nibble
 
