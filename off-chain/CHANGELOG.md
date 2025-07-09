@@ -4,6 +4,14 @@
 
 - Allow [`childAt`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#triechildatpath-string-promisetrieundefined) to return with intermediate sub-tree when passing an incomplete path.
 
+- Adjust `trie.prove` to now accept an optional (default=`false`) flag: `allowMissing`. When set, it becomes possible to build partial proofs for elements that
+are not in the trie. The proof can in particular be verified in exclusion to prove that the given element isn't in the tree (i.e. non-membership).
+
+- New utility functions for proofs:
+  - [`Proof.fromJSON(key, value, steps): Proof`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#prooffromjson-key-value-steps-proof) to recover a proof from an already serialized JSON value.
+  - [`Proof.setValue(value)`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#proofsetvaluevalue) to quickly change the value associated with a proof (without having to re-calculate a whole proof).
+  - [`Proof.toUPLC()`](https://github.com/aiken-lang/merkle-patricia-forestry/tree/main/off-chain#prooftouplc) provides a proof in a textual UPLC format; handy to use with `aiken uplc eval`.
+
 ## v1.2.0 - 2024-10-17
 
 ### Added

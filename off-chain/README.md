@@ -211,7 +211,7 @@ const apple = await trie.childAt(
 
 ### Proving
 
-#### `trie.prove(key: string|Buffer): Promise<Proof>`
+#### `trie.prove(key: string|Buffer, allowMissing?: bool): Promise<Proof>`
 
 Let's get to the exciting part! The whole point of building a Merkle Patricia Forestry is to provide succinct proofs for items. A proof is portable and bound to both:
 
@@ -222,6 +222,14 @@ Proofs are only valid for a precise trie root hash and state. So inserting (resp
 
 ```js
 const proofTangerine = await trie.prove('tangerine');
+// Proof {}
+```
+
+Note that it is possible to create partial proofs (or imply, proof of exclusion) for elements that are not in the trie. This is useful to prove non-membership: verifying the proof in exclusion would yield the current trie root.
+
+```js
+// 'melon' isn't in the Trie, but allowMissing is set `true`
+const proofMelon = await trie.prove('melon', true);
 // Proof {}
 ```
 
@@ -260,6 +268,10 @@ proofBanana.verify(false).equals(previousHash);
 >   return proof.verify(true);
 > }
 > ```
+
+#### `proof.setValue(value)`
+
+Once a proof has been generated for a given key/value element; it is possible to quickly change the value associated with that proof using `.setValue` so as the key -- and the rest of the trie; stay the same.
 
 #### `proof.toJSON(): object`
 
@@ -330,11 +342,36 @@ For convenience, you can also generate Aiken code that works with the on-chain p
 
 ```js
 proofTangerine.toAiken();
-// [
-//   Branch { skip: 0, neighbors: #"17a27bc4ce61078d26372800d331d6b8c4b00255080be66977c78b1554aabf8985c09af929492a871e4fae32d9d5c36e352471c
-// d659bcdb61de08f1722acc3b10eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f976100000000000000000000000000000000000000000000000
-// 00000000000000000" },
-//   Leaf { skip: 0, key: #"9702e39845bfd6e0d0a5b6cb4a3a1c25262528c11bcff857867a50a0670e3a28", value: #"b5898c51c32083e91b8c18c735d0ba74e08
-// f964a20b1639c189d1e8704b78a09" },
-// ]
+```
+
+```aiken
+[
+  Branch {
+    skip: 0,
+    neighbors: #"17a27bc4ce61078d26372800d331d6b8c4b00255080be66977c78b1554aabf8985c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b10eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610000000000000000000000000000000000000000000000000000000000000000",
+  },
+  Leaf {
+    skip: 0,
+    key: #"9702e39845bfd6e0d0a5b6cb4a3a1c25262528c11bcff857867a50a0670e3a28",
+    value: #"b5898c51c32083e91b8c18c735d0ba74e08f964a20b1639c189d1e8704b78a09",
+  },
+]
+```
+
+#### `proof.toUPLC(): String`
+
+Finally, one can also convert proofs in a textual UPLC format which as currently expected by some tools such as `aiken uplc eval`.
+
+```js
+proofTangerine.toAiken();
+```
+
+```uplc
+(con data
+  (List
+    [ Constr 0 [I 0, B #"17a27bc4ce61078d26372800d331d6b8c4b00255080be66977c78b1554aabf8985c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b10eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610000000000000000000000000000000000000000000000000000000000000000"]
+    , Constr 2 [I 0, B #"9702e39845bfd6e0d0a5b6cb4a3a1c25262528c11bcff857867a50a0670e3a28", B #"b5898c51c32083e91b8c18c735d0ba74e08f964a20b1639c189d1e8704b78a09"]
+    ]
+  )
+)
 ```
