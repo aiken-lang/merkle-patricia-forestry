@@ -385,16 +385,12 @@ fn do_branch(
 
   let prefix = nibbles(path, cursor, next_cursor)
 
+  let select =
+    slice_bytearray(_, blake2b_256_digest_size, neighbors)
+
   combine(
     prefix,
-    merkle_16(
-      branch,
-      root,
-      slice_bytearray(0, blake2b_256_digest_size, neighbors),
-      slice_bytearray(32, blake2b_256_digest_size, neighbors),
-      slice_bytearray(64, blake2b_256_digest_size, neighbors),
-      slice_bytearray(96, blake2b_256_digest_size, neighbors),
-    ),
+    merkle_16(branch, root, select(0), select(32), select(64), select(96)),
   )
 }
 

@@ -3,7 +3,7 @@
 //// This module contains internal functions used by the library. They are only
 //// exposed for internal testing and module splitting.
 
-use aiken/builtin.{blake2b_256, index_bytearray}
+use aiken/builtin.{blake2b_256}
 use aiken/primitive/bytearray
 
 // -----------------------------------------------------------------------------
@@ -49,8 +49,8 @@ pub fn nibbles(path: ByteArray, start: Int, end: Int) -> ByteArray {
 
 pub fn nibble(self: ByteArray, index: Int) -> Int {
   if index % 2 == 0 {
-    index_bytearray(self, index / 2) / 16
+    bytearray.at(self, index / 2) / 16
   } else {
-    index_bytearray(self, index / 2) % 16
+    bytearray.at(self, index / 2) % 16
   }
 }
