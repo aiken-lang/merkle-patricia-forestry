@@ -645,6 +645,47 @@ test('Trie: checking for membership & insertion on complex trie', async t => {
 });
 
 // -----------------------------------------------------------------------------
+// -------------------------------------------------------------- Non-membership
+// -----------------------------------------------------------------------------
+
+test('Trie: can prove non-membership', async t => {
+  const trie = await Trie.fromList(FRUITS_LIST);
+
+  const proof = await trie.prove("melon", true);
+  t.true(proof.verify(false).equals(trie.hash));
+
+  await trie.insert("melon", "🍈");
+  t.throws(
+    () => proof.verify(true),
+    { message(e) { return e.includes('attempted to verify an inclusion proof without value') } },
+  );
+
+  proof.setValue("🍈");
+  t.true(proof.verify(true).equals(trie.hash));
+});
+
+test('Trie: cannot alter non-membership proof', async t => {
+  const tangerine = "tangerine[uid: 11]";
+
+  const trie = await Trie.fromList(FRUITS_LIST.filter(({ key }) => key !== tangerine));
+
+  let proof = await trie.prove(tangerine, true);
+  t.true(proof.verify(false).equals(trie.hash));
+
+  const path = helpers.intoPath(tangerine);
+  const json = proof.toJSON();
+
+  t.is(path[0], '8');
+  t.is(path[4], '8');
+
+  json[0].skip = 4; // land on a '8', but with a different prefix.
+
+  proof = Proof.fromJSON(tangerine, undefined, json);
+  t.false(proof.verify(false).equals(trie.hash));
+});
+
+
+// -----------------------------------------------------------------------------
 // ---------------------------------------------------------------- Proof.toJSON
 // -----------------------------------------------------------------------------
 

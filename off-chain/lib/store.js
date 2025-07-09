@@ -39,7 +39,9 @@ export class Store {
   }
 
   async get(key, deserialise) {
-    return deserialise(key, await this.#db.get((key ?? NULL_HASH).toString('hex')), this);
+    const dbKey = (key ?? NULL_HASH).toString('hex');
+    const dbValue = await this.#db.get(dbKey);
+    return deserialise(key, applyBatch(dbKey, dbValue, this.#batch), this);
   }
 
   async put(key, value) {
@@ -96,4 +98,18 @@ function inMemoryMap() {
       return db.size;
     },
   }
+}
+
+function applyBatch(key, value, batch = []) {
+  return batch.reduce((newValue, op) => {
+    if (op.type === 'del' && op.key === key) {
+      return undefined;
+    }
+
+    if (op.type === 'put' && op.key === key) {
+      return op.value;
+    }
+
+    return newValue;
+  }, value);
 }
