@@ -301,8 +301,17 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
       do_branch(path, cursor, nextCursor, root, neighbors)
     }
 
-    [Fork { neighbor, .. }] -> {
-      let prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
+    [Fork { skip, neighbor }] -> {
+      let neighbor_prefix = bytearray.push(neighbor.prefix, neighbor.nibble)
+      let prefix =
+        if skip == 0 {
+          neighbor_prefix
+        } else {
+          bytearray.concat(
+            nibbles(path, cursor, cursor + skip),
+            neighbor_prefix,
+          )
+        }
       combine(prefix, neighbor.root)
     }
 

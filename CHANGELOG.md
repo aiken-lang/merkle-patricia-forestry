@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.2 - 2025-07-12
+
+### Added
+
+N/A
+
+### Changed
+
+#### on-chain
+
+- Fixed proof verification for terminal forks with non-empty prefixes.
+
+#### off-chain
+
+- Fixed proof verification for terminal forks with non-empty prefixes.
+
+### Removed
+
+N/A
+
 ## v1.1.1 - 2025-06-25
 
 ### Added

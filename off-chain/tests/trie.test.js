@@ -9,7 +9,6 @@ import { Store } from '../lib/store.js';
 import { Leaf, Branch, Proof, Trie } from '../lib/trie.js';
 import * as helpers from '../lib/helpers.js';
 
-
 const FRUITS_LIST = [
   { key: 'apple[uid: 58]', value: '🍎' },
   { key: 'apricot[uid: 0]', value: '🤷' },

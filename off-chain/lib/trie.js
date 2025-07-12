@@ -1347,7 +1347,21 @@ export class Proof {
 
         case Proof.#TYPE_FORK: {
           if (!includingItem && isLastStep) {
-            const prefix = [Buffer.from([step.neighbor.nibble]), step.neighbor.prefix];
+            const neighborPrefix = [
+              Buffer.from([step.neighbor.nibble]),
+              step.neighbor.prefix,
+            ];
+
+            // For skip > 0, we need to reconstruct the original neighbor node
+            // before the fork was created. The original node had the full prefix:
+            // (common prefix) + (neighbor nibble) + (neighbor's current prefix)
+            const prefix = step.skip === 0
+              ? neighborPrefix
+              : [
+                  nibbles(this.#path.slice(cursor, cursor + step.skip)),
+                  ...neighborPrefix,
+                ];
+
             return digest(Buffer.concat([...prefix, step.neighbor.root]));
           }
 
