@@ -53,18 +53,18 @@ See [on-chain](./on-chain#readme) for usage.
 
 This library implements a few optimizations. We borrow ideas from the [Ethereum's Modified Merkle Patricia Trie (MPT)](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie/) and also introduce a novel approach for organizing nodes as tiny [Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) that result in much smaller proof sizes, and gives the name to the structure: Merkle Patricia Forestry. This optimization and overall approach are covered in more detail [in the wiki](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Technical-analysis#forestry).
 
-While this optimization sacrifices some memory and CPU execution units for smaller proof sizes, the library ultimately achieves a good trade-off. The table below summarizes the proof size, memory units, and CPU units for various sizes of tries. Note that the numbers in the table correspond to _one proof verification_ (e.g., membership). Insertion and deletion in the trie both require _two proof verifications_, so double the numbers!
+While this optimization sacrifices some memory and CPU execution units for smaller proof sizes, the library ultimately achieves a good trade-off. The table below summarizes the proof size, memory units, and CPU units for various sizes of tries and operations. On top of that, including the MPF library as a dependency adds ~2.5KB of generated UPLC.
 
-trie size | avg proof size (bytes) | avg proof mem units     | avg proof cpu units    |
----:      | -------------:         | ------------:           | ------------:          |
-10²       | 250                    | 70K  <sup>(0.70%)</sup> | 18M <sup>(0.12%)</sup> |
-10³       | 350                    | 100K <sup>(1.00%)</sup> | 26M <sup>(0.19%)</sup> |
-10⁴       | 460                    | 130K <sup>(1.30%)</sup> | 35M <sup>(0.25%)</sup> |
-10⁵       | 560                    | 160K <sup>(1.60%)</sup> | 44M <sup>(0.31%)</sup> |
-10⁶       | 670                    | 190K <sup>(1.90%)</sup> | 53M <sup>(0.38%)</sup> |
-10⁷       | 780                    | 220K <sup>(2.20%)</sup> | 62M <sup>(0.44%)</sup> |
-10⁸       | 880                    | 250K <sup>(2.50%)</sup> | 71M <sup>(0.51%)</sup> |
-10⁹       | 990                    | 280K <sup>(2.80%)</sup> | 79M <sup>(0.56%)</sup> |
+size | proof size (bytes) | insert or delete | update | membership | non-membership |
+---:      | -------------:         | ------------:        | ------------: | ------------:   | ------------: |
+10² | ~200 | <sub>mem: 188.5K</sub><br/><sup>cpu: 53.9M</sup> | <sub>mem: 222.5K</sub><br/><sup>cpu: 64.5M</sup> | <sub>mem: 111.3K</sub><br/><sup>cpu: 32.3M</sup> | <sub>mem: 77.3K</sub><br/><sup>cpu: 21.6M</sup> |
+10³ | ~340 | <sub>mem: 252.5K</sub><br/><sup>cpu: 72M</sup> | <sub>mem: 284.5K</sub><br/><sup>cpu: 82M</sup> | <sub>mem: 142.3K</sub><br/><sup>cpu: 41M</sup> | <sub>mem: 110.3K</sub><br/><sup>cpu: 31M</sup> |
+10⁴ | ~480 | <sub>mem: 316.5K</sub><br/><sup>cpu: 90.1M</sup> | <sub>mem: 346.5K</sub><br/><sup>cpu: 99.5M</sup> | <sub>mem: 173.3K</sub><br/><sup>cpu: 49.8M</sup> | <sub>mem: 143.3K</sub><br/><sup>cpu: 40.3M</sup> |
+10⁵ | ~620 | <sub>mem: 380.5K</sub><br/><sup>cpu: 108.2M</sup> | <sub>mem: 408.5K</sub><br/><sup>cpu: 117M</sup> | <sub>mem: 204.3K</sub><br/><sup>cpu: 58.5M</sup> | <sub>mem: 176.3K</sub><br/><sup>cpu: 49.7M</sup> |
+10⁶ | ~760 | <sub>mem: 444.5K</sub><br/><sup>cpu: 126.3M</sup> | <sub>mem: 470.5K</sub><br/><sup>cpu: 134.5M</sup> | <sub>mem: 235.3K</sub><br/><sup>cpu: 67.3M</sup> | <sub>mem: 209.3K</sub><br/><sup>cpu: 59M</sup> |
+10⁷ | ~900 | <sub>mem: 508.5K</sub><br/><sup>cpu: 144.4M</sup> | <sub>mem: 532.5K</sub><br/><sup>cpu: 152M</sup> | <sub>mem: 266.3K</sub><br/><sup>cpu: 76M</sup> | <sub>mem: 242.3K</sub><br/><sup>cpu: 68.4M</sup> |
+10⁸ | ~1040 | <sub>mem: 572.5K</sub><br/><sup>cpu: 162.5M</sup> | <sub>mem: 594.5K</sub><br/><sup>cpu: 169.5M</sup> | <sub>mem: 297.3K</sub><br/><sup>cpu: 84.8M</sup> | <sub>mem: 275.3K</sub><br/><sup>cpu: 77.7M</sup> |
+10⁹ | ~1180 | <sub>mem: 636.5K</sub><br/><sup>cpu: 180.6M</sup> | <sub>mem: 656.5K</sub><br/><sup>cpu: 187M</sup> | <sub>mem: 328.3K</sub><br/><sup>cpu: 93.5M</sup> | <sub>mem: 308.3K</sub><br/><sup>cpu: 87.1M</sup> |
 
  > [!NOTE]
  >

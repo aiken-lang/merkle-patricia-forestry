@@ -11,24 +11,6 @@
 //// both cpu and mem units. And they also provide proofs that are a / lot smaller
 //// than traditional Merkle Patricia Trie; proofs remain however the / main
 //// limiting factor.
-////
-//// Here's a little table that summarizes the average proof's sizes in bytes
-//// given a number of elements.
-////
-//// We also consider the average memory and CPU execution units for verifying
-//// a proof for various sizes. Note that [`insert`](#insert) and
-//// [`delete`](#delete) require **two** proofs verifications.
-////
-//// size | avg proof size | avg proof mem | avg proof cpu |
-//// ---: | -------------: | ------------: | ------------: |
-////  10² |          250   | 70K           | 28M           |
-////  10³ |          350   | 100K          | 42M           |
-////  10⁴ |          460   | 130K          | 56M           |
-////  10⁵ |          560   | 160K          | 70M           |
-////  10⁶ |          670   | 190K          | 84M           |
-////  10⁷ |          780   | 220K          | 98M           |
-////  10⁸ |          880   | 250K          | 112M          |
-////  10⁹ |          990   | 280K          | 126M          |
 
 use aiken/builtin.{blake2b_256, slice_bytearray}
 use aiken/merkle_patricia_forestry/helpers.{combine, nibble, nibbles, suffix}
