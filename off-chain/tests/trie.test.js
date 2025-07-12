@@ -1,13 +1,16 @@
+import * as cp from 'node:child_process';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { inspect } from 'node:util';
+import { randomBytes } from 'node:crypto';
 
 import test from 'ava';
 
 import { Store } from '../lib/store.js';
 import { Leaf, Branch, Proof, Trie } from '../lib/trie.js';
 import * as helpers from '../lib/helpers.js';
+import * as cbor from '../lib/cbor.js';
 
 
 const FRUITS_LIST = [
@@ -645,6 +648,81 @@ test('Trie: checking for membership & insertion on complex trie', async t => {
 });
 
 // -----------------------------------------------------------------------------
+// -------------------------------------------------------------- Non-membership
+// -----------------------------------------------------------------------------
+
+test('Trie: can prove non-membership', async t => {
+  const trie = await Trie.fromList(FRUITS_LIST);
+
+  const element = { key: "melon", value: "🍈" };
+
+  // Can build and verify an exclusion proof.
+  const proof = await trie.prove(element.key, true);
+  t.true(proof.verify(false).equals(trie.hash));
+
+  // The proof cannot work for nearby element nor any other key in the trie.
+  FRUITS_LIST.forEach(fruit => {
+    const falseProof = Proof.fromJSON(fruit.key, undefined, proof.toJSON());
+    t.false(falseProof.verify(false).equals(trie.hash));
+  });
+
+  // The proof would work for an element similarly positioned in the trie.
+  const usurper = "usurper [uid: 447]";
+  t.is(
+    helpers.intoPath(element.key).slice(0, 2),
+    helpers.intoPath(usurper).slice(0, 2),
+  );
+  const steps = proof.toJSON();
+  t.is(
+    steps.reduce((acc, { skip }) => acc + 1 + skip, 0),
+    2,
+  );
+  t.true(Proof.fromJSON(usurper, undefined, steps).verify(false).equals(trie.hash));
+
+  // The proof can be reused, once assigned a value, for inclusion.
+  await trie.insert(element.key, element.value);
+  t.throws(
+    () => proof.verify(true),
+    { message(e) { return e.includes('attempted to verify an inclusion proof without value') } },
+  );
+  proof.setValue(element.value);
+  t.true(proof.verify(true).equals(trie.hash));
+
+  // The proof doesn't compute in exclusion anymore.
+  t.false(proof.verify(false).equals(trie.hash));
+});
+
+test('Trie: cannot alter non-membership proof', async t => {
+  const tangerine = "tangerine[uid: 11]";
+
+  const trie = await Trie.fromList(FRUITS_LIST.filter(({ key }) => key !== tangerine));
+
+  let proof = await trie.prove(tangerine, true);
+  t.true(proof.verify(false).equals(trie.hash));
+
+  const path = helpers.intoPath(tangerine);
+  const json = proof.toJSON();
+
+  t.is(path[0], '8');
+  t.is(path[4], '8');
+
+  json[0].skip = 4; // land on a '8', but with a different prefix.
+
+  proof = Proof.fromJSON(tangerine, undefined, json);
+  t.false(proof.verify(false).equals(trie.hash));
+});
+
+test('Trie: cannot prove non-membership of members', async t => {
+  await Promise.all([undefined, new Store(tmpFilename())].map(async store => {
+    const trie = await Trie.fromList(FRUITS_LIST);
+    return Promise.all(FRUITS_LIST.map(async fruit => {
+      const proof = await trie.prove(fruit.key, true);
+      t.false(proof.verify(false).equals(trie.hash));
+    }));
+  }));
+});
+
+// -----------------------------------------------------------------------------
 // ---------------------------------------------------------------- Proof.toJSON
 // -----------------------------------------------------------------------------
 
@@ -732,6 +810,77 @@ test('Proof.toAiken (kumquat)', async t => {
 });
 
 // -----------------------------------------------------------------------------
+// --------------------------------------------------------------- Fuzzy testing
+// -----------------------------------------------------------------------------
+
+const FUZZ_MAX_ITERATION = 500;
+
+const aiken = {
+  insert: aikenFFI("insert"),
+  remove: aikenFFI("delete"),
+  miss: aikenFFI("miss"),
+};
+
+test('Fuzz', async t => {
+  const trie = new Trie();
+
+  for (let i = 0; i < FUZZ_MAX_ITERATION; i += 1) {
+    const key = randomBytes(2);
+    const value = randomBytes(4);
+
+    let previousRoot = trie.hash;
+
+    const oldValue = await trie.get(key);
+
+    if (oldValue !== undefined) {
+      // Key already exist, we extract a proof, and delete it.
+      const proof = await trie.prove(key);
+      await trie.delete(key);
+      t.true(proof.verify(true).equals(previousRoot))
+      t.true(trie.hash === null || proof.verify(false).equals(trie.hash))
+
+      // Also check that the on-chain code can compute the removal
+      t.true(
+        aiken.remove(previousRoot, key, oldValue, proof.toUPLC())
+          .equals(trie.hash)
+      );
+
+      previousRoot = trie.hash;
+
+      // Add the new value.
+      await trie.insert(key, value);
+      proof.setValue(value);
+      t.true(proof.verify(true).equals(trie.hash))
+      t.true(
+        aiken.insert(previousRoot, key, value, proof.toUPLC())
+          .equals(trie.hash)
+      );
+    } else {
+      // Key doesn't exists. Let's prove it's not in the trie first.
+      let proof = await trie.prove(key, true);
+      const proofRoot = proof.verify(false);
+      t.true(proofRoot === null && trie.hash === null || proofRoot.equals(trie.hash));
+      t.true(aiken.miss(trie.hash ?? helpers.NULL_HASH, key, proof.toUPLC()))
+
+      // Add it.
+      await trie.insert(key, value);
+
+      // Check both inclusion and exclusion proofs for this element
+      proof = await trie.prove(key);
+      t.true(previousRoot === null || proof.verify(false).equals(previousRoot));
+      t.true(proof.verify(true).equals(trie.hash));
+
+      // Also check that the on-chain code can compute the insertion.
+      t.true(
+        aiken.insert(previousRoot ?? helpers.NULL_HASH, key, value, proof.toUPLC())
+          .equals(trie.hash)
+      );
+    }
+  }
+});
+
+
+// -----------------------------------------------------------------------------
 // ---------------------------------------------------------------- Test Helpers
 // -----------------------------------------------------------------------------
 
@@ -750,4 +899,25 @@ function shuffle(xs) {
 
 function tmpFilename() {
   return path.join(os.tmpdir(), `merkle-patricia-forest-db_${randomBytes(8).toString('hex')}`);
+}
+
+function aikenFFI(fnName) {
+  let cmd = `aiken export --module aiken/merkle_patricia_forestry --name ${fnName}_ffi 2>/dev/null`;
+  const opts = { cwd: path.join(import.meta.dirname, "../../on-chain") };
+  const fn = JSON.parse(cp.execSync(cmd, opts)).compiledCode;
+  const filename = path.join(os.tmpdir(), `${fnName}_ffi.cbor`);
+  fs.writeFileSync(filename, fn);
+  return function(...args) {
+    args = args.map(arg => {
+      if (arg instanceof Buffer) {
+          return `'(con data (B #${arg.toString('hex') }))'`;
+      }
+      return `'${arg}'`;
+    });
+    cmd = `aiken uplc eval --cbor ${filename} ${args.join(" ")}`
+    const result = JSON.parse(cp.execSync(cmd, opts)).result;
+    return result.startsWith("(con bool")
+      ? result === "(con bool True)"
+      : Buffer.from(result.slice(21, 86), 'hex');
+  }
 }

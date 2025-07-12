@@ -106,7 +106,10 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
 /// requires a [Proof](#Proof) of inclusion for the element. The latter can be
 /// obtained off-chain from the whole trie containing the element.
 ///
-/// Returns `False` when the element isn't in the tree.
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the key IS NOT in the trie.
+/// > It only indicates that it isn't present with the given value. To prove
+/// > exclusion of a key, use [`miss`](#miss).
 pub fn has(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -114,6 +117,20 @@ pub fn has(
   proof: Proof,
 ) -> Bool {
   including(key, value, proof) == self.root
+}
+
+/// since | <code>1.2.0</code>
+/// ---   | ---
+///
+/// Test whether a key is missing from the trie. This requires a
+/// [Proof](#Proof) of exclusion for the element. The latter can be obtained
+/// off-chain from the whole trie containing the element.
+///
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the element IS in the trie.
+/// > To prove inclusion, use [`has`](#has).
+pub fn miss(self: MerklePatriciaForestry, key: ByteArray, proof: Proof) -> Bool {
+  excluding(key, proof) == self.root
 }
 
 // # Modifying
@@ -180,7 +197,7 @@ pub fn update(
   proof: Proof,
   old_value: ByteArray,
   new_value: ByteArray,
-) {
+) -> MerklePatriciaForestry {
   expect including(key, old_value, proof) == self.root
   // If we were doing a delete followed by an insert, we'd end up checking the `excluding` again here
   MerklePatriciaForestry { root: including(key, new_value, proof) }
@@ -249,6 +266,12 @@ fn including(key: ByteArray, value: ByteArray, proof: Proof) -> ByteArray {
   do_including(blake2b_256(key), blake2b_256(value), 0, proof)
 }
 
+test including_empty_proof() {
+  let (k, v) = ("foo", "bar")
+  let path = blake2b_256(k)
+  including(k, v, []) == combine(suffix(path, 0), blake2b_256(v))
+}
+
 fn do_including(
   path: ByteArray,
   value: ByteArray,
@@ -259,29 +282,29 @@ fn do_including(
     [] -> combine(suffix(path, cursor), value)
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors)
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
+      do_branch(path, cursor, next_cursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
 
-    [Leaf { skip, key, value: neighborValue }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_including(path, value, nextCursor, steps)
+    [Leaf { skip, key, value: neighbor_value }, ..steps] -> {
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor),
-          nibble: nibble(key, nextCursor - 1),
-          root: neighborValue,
+          prefix: suffix(key, next_cursor + 1),
+          nibble: nibble(key, next_cursor),
+          root: neighbor_value,
         }
 
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
   }
 }
@@ -298,14 +321,18 @@ fn excluding(key: ByteArray, proof: Proof) -> ByteArray {
   do_excluding(blake2b_256(key), 0, proof)
 }
 
+test excluding_empty_proof() {
+  excluding("foo", []) == empty.root
+}
+
 fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
   when proof is {
     [] -> null_hash
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
+      do_branch(path, cursor, next_cursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }] -> {
@@ -347,25 +374,25 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
 
     [Leaf { key, value, .. }] -> combine(suffix(key, cursor), value)
 
     [Leaf { skip, key, value }, ..steps] -> {
-      let nextCursor = cursor + 1 + skip
-      let root = do_excluding(path, nextCursor, steps)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor),
-          nibble: nibble(key, nextCursor - 1),
+          prefix: suffix(key, next_cursor + 1),
+          nibble: nibble(key, next_cursor),
           root: value,
         }
 
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
   }
 }
@@ -377,37 +404,33 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
 fn do_branch(
   path: ByteArray,
   cursor: Int,
-  nextCursor: Int,
+  next_cursor: Int,
   root: ByteArray,
   neighbors: ByteArray,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor - 1)
+  let branch = nibble(path, next_cursor)
 
-  let prefix = nibbles(path, cursor, nextCursor - 1)
+  let prefix = nibbles(path, cursor, next_cursor)
+
+  let select =
+    slice_bytearray(_, blake2b_256_digest_size, neighbors)
 
   combine(
     prefix,
-    merkle_16(
-      branch,
-      root,
-      slice_bytearray(0, blake2b_256_digest_size, neighbors),
-      slice_bytearray(32, blake2b_256_digest_size, neighbors),
-      slice_bytearray(64, blake2b_256_digest_size, neighbors),
-      slice_bytearray(96, blake2b_256_digest_size, neighbors),
-    ),
+    merkle_16(branch, root, select(0), select(32), select(64), select(96)),
   )
 }
 
 fn do_fork(
   path: ByteArray,
   cursor: Int,
-  nextCursor: Int,
+  next_cursor: Int,
   root: ByteArray,
   neighbor: Neighbor,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor - 1)
+  let branch = nibble(path, next_cursor)
 
-  let prefix = nibbles(path, cursor, nextCursor - 1)
+  let prefix = nibbles(path, cursor, next_cursor)
 
   expect branch != neighbor.nibble
 
@@ -420,4 +443,61 @@ fn do_fork(
       combine(neighbor.prefix, neighbor.root),
     ),
   )
+}
+
+// -----------------------------------------------------------------------------
+// -------------------------------------------------- Foreign Function Interface
+// -----------------------------------------------------------------------------
+
+/// A version of 'has' that unwraps the opaque arguments, to allow being exported.
+fn has_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> Bool {
+  including(key, value, proof) == self
+}
+
+test disable_unused_warning_has_ffi() fail {
+  has_ffi("", "", "", [])
+}
+
+/// A version of 'miss' that unwraps the opaque arguments, to allow being exported.
+fn miss_ffi(self: ByteArray, key: ByteArray, proof: Proof) -> Bool {
+  excluding(key, proof) == self
+}
+
+test disable_unused_warning_miss_ffi() fail {
+  miss_ffi("", "", [])
+}
+
+/// A version of 'insert' that unwraps the opaque arguments, to allow being exported.
+fn insert_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect excluding(key, proof) == self
+  including(key, value, proof)
+}
+
+test disable_unused_warning_insert_ffi() fail {
+  insert_ffi("", "", "", []) == ""
+}
+
+/// A version of 'delete' that unwraps the opaque arguments, to allow being exported.
+fn delete_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect including(key, value, proof) == self
+  excluding(key, proof)
+}
+
+test disable_unused_warning_delete_ffi() fail {
+  delete_ffi("", "", "", []) == ""
 }

@@ -347,6 +347,7 @@ export class Trie {
     const node = await this.childAt(path);
 
     key = typeof key === 'string' ? Buffer.from(key) : key;
+
     // If the node is a Leaf and the key matches, return the value
     if (node instanceof Leaf && node.key.equals(key)) {
       return node.value;
@@ -356,15 +357,60 @@ export class Trie {
     return undefined;
   }
 
+
   /**
-   * Creates a proof of inclusion of a given key in the trie.
+   * Creates a proof for a given element.
    *
    * @param {Buffer|string} key
+   *  The key for the element
+   * @param {bool} [allowMissing]
+   *  An optional flag to allow building a proof for the element when it's not
+   *  in the trie. This is useful to prove non-membership: verifying the proof
+   *  in exclusion would yield the current trie root.
+   *
    * @return {Promise<Proof>}
-   * @throws {AssertionError} When the value is not in the trie.
+   *
+   * @throws {AssertionError}
+   *  When 'allowMissing' is not set and the key is not in the trie.
    */
-  async prove(key) {
-    return this.walk(intoPath(key));
+  async prove(key, allowMissing = false) {
+    try {
+      return this.isEmpty() && allowMissing
+        ? new Proof(intoPath(key), undefined, [])
+        : await this.walk(intoPath(key));
+    } catch(e) {
+      if (!allowMissing) {
+        throw e;
+      }
+
+      /* c8 ignore next 3 */
+      if (!(e instanceof assert.AssertionError) ) {
+        throw e;
+      }
+
+      /* c8 ignore next 3 */
+      if (!(e.message ?? "").includes("not in trie")) {
+        throw e;
+      }
+
+      try {
+        return await this.store.batch(async () => {
+          const hash = this.hash;
+          this instanceof Branch
+            ? await tryInsert(this, key, "")
+            : await this.insert(key, "");
+          const proof = await this.prove(key);
+          proof.setValue(undefined);
+          await tryDelete(this, key);
+          assert(hash.equals(this.hash));
+          return proof;
+        });
+      /* c8 ignore next 4 */
+      } catch (e) {
+        await this.save();
+        throw e;
+      }
+    }
   }
 
 
@@ -401,6 +447,7 @@ export class Trie {
         return Leaf.deserialise(hash, blob, store);
       case 'Branch':
         return Branch.deserialise(hash, blob, store);
+      /* c8 ignore next 2 */
       default:
         throw new Error(`unexpected blob to deserialise: ${blob?.__kind}: ${blob}`);
     }
@@ -807,73 +854,7 @@ export class Branch extends Trie {
    */
   async insert(key, value) {
     try {
-      return await this.store.batch(async () => {
-        const loop = async (node, path, parents) => {
-          const prefix = node.prefix.length > 0
-            ? commonPrefix([node.prefix, path])
-            : '';
-
-          path = path.slice(prefix.length);
-
-          const thisNibble = nibble(path[0]);
-
-          await node.fetchChildren();
-
-          if (prefix.length < node.prefix.length) {
-            const newPrefix = node.prefix.slice(prefix.length);
-            const newNibble = nibble(newPrefix[0]);
-
-            assert(thisNibble !== newNibble);
-
-            await node.into(Branch, prefix, {
-              [thisNibble]: await Leaf.from(
-                path.slice(1),
-                key,
-                value,
-                this.store,
-              ),
-              [newNibble]: await Branch.from(
-                node.prefix.slice(prefix.length + 1),
-                node.children,
-                this.store,
-              ),
-            });
-
-            return parents;
-          }
-
-          parents.unshift(node);
-
-          const child = node.children[thisNibble];
-
-          if (child === undefined) {
-            node.children[thisNibble] = await Leaf.from(
-              path.slice(1),
-              key,
-              value,
-              this.store
-            );
-            return parents;
-          }
-
-          if (child instanceof Leaf) {
-            await child.insert(key, value);
-            return parents;
-          } else {
-            return loop(child, path.slice(1), parents);
-          }
-        };
-
-        const parents = await loop(this, intoPath(key), []);
-
-        await parents.reduce(async (task, node) => {
-          await task;
-          node.size += 1;
-          return node.save(node.hash);
-        }, Promise.resolve());
-
-        return this;
-      });
+      return await this.store.batch(() => tryInsert(this, key, value));
     } catch(e) {
       // Ensures that children aren't kept in-memory when an insertion failed.
       await this.save();
@@ -895,70 +876,8 @@ export class Branch extends Trie {
    * @throws {AssertionError} when a value doesn't exists at the given key.
    */
   async delete(key) {
-    key = typeof key === 'string' ? Buffer.from(key) : key;
-
-    function nonEmptyChildren(node) {
-      return node.children.flatMap((n, ix) => n === undefined ? [] : [[n, ix]]);
-    }
-
     try {
-      return await this.store.batch(async () => {
-        const loop = async (node, path) => {
-          if (node instanceof Leaf) {
-            await node.delete(key);
-            return undefined;
-          }
-
-          await this.store.del(node.hash);
-
-          const cursor = node.prefix.length;
-
-          const thisNibble = nibble(path[cursor]);
-
-          await node.fetchChildren();
-
-          const child = await node.children[thisNibble];
-
-          // NOTE: 'loop' returns 'undefined' when the child is a leaf, which means
-          // we've reached the end of the trie. So that node gets effectively deleted.
-          //
-          // Then, because we call _loop_ before doing any further modification, we can
-          // continue knowing that children have already been updated.
-          node.children[thisNibble] = await loop(child, path.slice(cursor + 1));
-
-          node.size -= 1;
-
-          const neighbors = nonEmptyChildren(node);
-
-          // NOTE: We do not allow branches with only one child. So if after modification,
-          // there's only one child left (a.k.a the neighbor), we merge our only child up
-          // with ourself while preserving its stucture for the child may be a Leaf or
-          // another Branch node.
-          if (neighbors.length === 1) {
-            const [neighbor, neighborNibble] = neighbors[0];
-
-            const prefix = [
-              node.prefix,
-              neighborNibble.toString(16),
-              neighbor.prefix,
-            ].join('');
-
-            await this.store.del(neighbor.hash);
-
-            if (neighbor instanceof Leaf) {
-              return node.into(Leaf, prefix, neighbor.key, neighbor.value);
-            }
-
-            node.children = neighbor.children;
-            node.prefix = prefix;
-            node.size = neighbor.size;
-          }
-
-          return node.save();
-        };
-
-        return loop(this, intoPath(key));
-      });
+      return await this.store.batch(() => tryDelete(this, key))
     } catch(e) {
       // Ensures that children aren't kept in-memory when an deletion failed.
       await this.save();
@@ -1096,9 +1015,10 @@ export class Branch extends Trie {
    * @private
    */
   async withChildren(callback) {
-    return callback(await Promise.all(this.children.map(child => child === undefined
-      ? child
-      : this.store.get(child.hash, Trie.deserialise)
+    return callback(await Promise.all(this.children.map(child =>
+      child === undefined
+        ? child
+        : this.store.get(child.hash, Trie.deserialise)
     )));
   }
 
@@ -1227,6 +1147,25 @@ export class Proof {
     this.#steps = steps;
   }
 
+
+  /**
+   * Set or reset the value from the proof; This allows re-using the same proof path
+   * in the same trie, but for different values.
+   *
+   * @param {Buffer|string|undefined} value
+   *   The new value to insert. Strings are treated as UTF-8 byte buffers.
+   *   Setting the proof's value to 'undefined' effectively makes the proof only
+   *   work for exclusion (i.e. testing non-membership).
+   */
+  setValue(value) {
+    if (value === undefined) {
+      this.#value = undefined;
+    } else {
+      this.#value = typeof value === 'string' ? Buffer.from(value) : value;
+    }
+  }
+
+
   /** Add a step in front of the proof. The proof is built recursively from the
    * bottom-up (from the leaves to the root). At each step in the proof, we
    * rewind one level until we reach the root. At each level, we record the
@@ -1296,10 +1235,25 @@ export class Proof {
    * @param {bool} [includingItem=true]
    *   When set, computes the resulting root hash considering the underlying
    *   value is in the trie.
-   * @return {Buffer}
+   * @return {Buffer|null}
    *   A resulting hash as a byte buffer, to be compared with a known root.
+   *   Returns null when the resulting hash is an empty trie (e.g. when
+   *   checking an empty proof in exclusion).
    */
-  verify(includingItem = true) {
+  verify(includingItem = true, key) {
+    assert(
+      !(includingItem && this.#value === undefined),
+      "attempted to verify an inclusion proof without value: use 'proof.setValue(..)', or build a new proof."
+    );
+
+    if (this.#steps.length === 0) {
+      if (includingItem) {
+        return Leaf.computeHash(this.#path, digest(this.#value));
+      } else {
+        return null;
+      }
+    }
+
     const loop = (cursor, ix) => {
       const step = this.#steps[ix];
 
@@ -1421,6 +1375,7 @@ export class Proof {
           });
         }
 
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }
@@ -1429,11 +1384,12 @@ export class Proof {
     return loop(0, 0);
   }
 
+
   /** Deserialize a proof from JSON.
    *
    * @param {Buffer|string} path
    *   The original key being proven. Strings are treated as UTF-8 byte buffers.
-   * @param {Buffer|string} value
+   * @param {Buffer|string|undefined} value
    *   The original value being proven. Strings are treated as UTF-8 byte buffers.
    * @param {Array<Object>} steps
    *   The steps serialized to JSON.
@@ -1472,11 +1428,13 @@ export class Proof {
               root: Buffer.from(step.neighbor.root, 'hex'),
             },
           };
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }
     }));
   }
+
 
   /** Serialise the proof as a portable JSON.
    *
@@ -1517,6 +1475,34 @@ export class Proof {
     };
 
     return this.#steps.map(step => serialisers[step.type](step));
+  }
+
+  toUPLC() {
+    const steps = this.toJSON().map(step => {
+        switch (step.type) {
+          case Proof.#TYPE_BRANCH.description: {
+            const skip = `I ${step.skip}`;
+            const neighbors = `B #${step.neighbors}`;
+            return `Constr 0 [${skip}, ${neighbors}]`;
+          }
+          case Proof.#TYPE_FORK.description: {
+            const skip = `I ${step.skip}`;
+            const nibble = `I ${step.neighbor.nibble}`;
+            const prefix = `B #${step.neighbor.prefix}`;
+            const root = `B #${step.neighbor.root}`;
+            const neighbors = `Constr 0 [${nibble}, ${prefix}, ${root}]`;
+            return `Constr 1 [${skip}, ${neighbors}]`;
+          }
+          case Proof.#TYPE_LEAF.description: {
+            const skip = `I ${step.skip}`;
+            const key = `B #${step.neighbor.key}`;
+            const value = `B #${step.neighbor.value}`;
+            return `Constr 2 [${skip}, ${key}, ${value}]`;
+          }
+        }
+    });
+
+    return `(con data (List [${steps.join(", ")}]))`;
   }
 
 
@@ -1565,6 +1551,7 @@ export class Proof {
               cbor.end(),
             ));
           }
+          /* c8 ignore next 2 */
           default:
             throw new Error(`unknown step type ${step.type}`);
         }
@@ -1591,6 +1578,7 @@ export class Proof {
         case Proof.#TYPE_LEAF.description: {
           return `  Leaf { skip: ${step.skip}, key: #"${step.neighbor.key}", value: #"${step.neighbor.value}" },\n`
         }
+        /* c8 ignore next 2 */
         default:
           throw new Error(`unknown step type ${step.type}`);
       }
@@ -1598,4 +1586,177 @@ export class Proof {
 
     return `[\n${steps.join('')}]`;
   }
+}
+
+/**
+ * Like 'insert', but as a raw sequence of operations (outside of any
+ * database batch).
+ *
+ * This is useful to compose it with either another insert, or a delete
+ * operation as part of the same database batch.
+ *
+ * For instance, to obtain a Trie containing a given element and build proofs
+ * from it, while not actually modifying the database even in the event of a
+ * crash / fault.
+ *
+ * @param {Buffer|string} key
+ *   The key to insert. Strings are treated as UTF-8 byte buffers.
+ *
+ * @param {Buffer|string} value
+ *   The value to insert. Strings are treated as UTF-8 byte buffers.
+ *
+ * @returns {Promise<Trie>}
+ *   The modified trie, eventually.
+ *
+ * @throws {AssertionError} when a value already exists at the given key.
+ */
+async function tryInsert(self, key, value) {
+  const loop = async (node, path, parents) => {
+    const prefix = node.prefix.length > 0
+      ? commonPrefix([node.prefix, path])
+      : '';
+
+    path = path.slice(prefix.length);
+
+    const thisNibble = nibble(path[0]);
+
+    await node.fetchChildren();
+
+    if (prefix.length < node.prefix.length) {
+      const newPrefix = node.prefix.slice(prefix.length);
+      const newNibble = nibble(newPrefix[0]);
+
+      assert(thisNibble !== newNibble);
+
+      await node.into(Branch, prefix, {
+        [thisNibble]: await Leaf.from(
+          path.slice(1),
+          key,
+          value,
+          self.store,
+        ),
+        [newNibble]: await Branch.from(
+          node.prefix.slice(prefix.length + 1),
+          node.children,
+          self.store,
+        ),
+      });
+
+      return parents;
+    }
+
+    parents.unshift(node);
+
+    const child = node.children[thisNibble];
+
+    if (child === undefined) {
+      node.children[thisNibble] = await Leaf.from(
+        path.slice(1),
+        key,
+        value,
+        self.store
+      );
+      return parents;
+    }
+
+    if (child instanceof Leaf) {
+      await child.insert(key, value);
+      return parents;
+    } else {
+      return loop(child, path.slice(1), parents);
+    }
+  };
+
+  const parents = await loop(self, intoPath(key), []);
+
+  await parents.reduce(async (task, node) => {
+    await task;
+    node.size += 1;
+    return node.save(node.hash);
+  }, Promise.resolve());
+
+  return self;
+}
+
+/**
+ * Like delete, but as a raw sequence of operations (outside of any database
+ * batch).
+ *
+ * This is useful to compose it with either another delete, or a delete
+ * operation as part of the same database batch.
+ *
+ * For instance, to obtain a Trie containing a given element and build proofs
+ * from it, while not actually modifying the database even in the event of a
+ * crash / fault.
+ *
+ * @param {Buffer|string} key
+ *   The key to insert. Strings are treated as UTF-8 byte buffers.
+ *
+ * @returns {Promise<Trie>}
+ *   The modified trie, eventually.
+ *
+ * @throws {AssertionError} when a value doesn't exists at the given key.
+ */
+async function tryDelete(self, key) {
+  key = typeof key === 'string' ? Buffer.from(key) : key;
+
+  function nonEmptyChildren(node) {
+    return node.children.flatMap((n, ix) => n === undefined ? [] : [[n, ix]]);
+  }
+
+  const loop = async (node, path) => {
+    if (node instanceof Leaf) {
+      await node.delete(key);
+      return undefined;
+    }
+
+    await self.store.del(node.hash);
+
+    const cursor = node.prefix.length;
+
+    const thisNibble = nibble(path[cursor]);
+
+    await node.fetchChildren();
+
+    const child = await node.children[thisNibble];
+
+    // NOTE: 'loop' returns 'undefined' when the child is a leaf, which means
+    // we've reached the end of the trie. So that node gets effectively deleted.
+    //
+    // Then, because we call _loop_ before doing any further modification, we can
+    // continue knowing that children have already been updated.
+    node.children[thisNibble] = await loop(child, path.slice(cursor + 1));
+
+    node.size -= 1;
+
+    const neighbors = nonEmptyChildren(node);
+
+    // NOTE: We do not allow branches with only one child. So if after modification,
+    // there's only one child left (a.k.a the neighbor), we merge our only child up
+    // with ourself while preserving its stucture for the child may be a Leaf or
+    // another Branch node.
+    if (neighbors.length === 1) {
+      const [neighbor, neighborNibble] = neighbors[0];
+
+      const prefix = [
+        node.prefix,
+        neighborNibble.toString(16),
+        neighbor.prefix,
+      ].join('');
+
+      await self.store.del(neighbor.hash);
+
+      if (neighbor instanceof Leaf) {
+        return node.into(Leaf, prefix, neighbor.key, neighbor.value);
+      }
+
+      node.children = neighbor.children;
+      node.prefix = prefix;
+      node.size = neighbor.size;
+    }
+
+    return node.save();
+  };
+
+  return loop(self, intoPath(key));
 }

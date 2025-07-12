@@ -23,9 +23,11 @@ The use cases are numerous, such as maintaining large on-chain registries (e.g. 
 
 Using only a root hash digest (32 bytes) and a succinct proof (<1KB), Merkle Patricia Tries provides rapid:
 
-- [x] membership
+- [x] membership (i.e. inclusion of key/value pairs)
+- [x] non-membership (i.e. exclusion of keys)
 - [x] insertion
 - [x] deletion
+- [x] update (i.e. deletation followed by insertion)
 
 ...of any key/value item in a large (billions) store.
 
