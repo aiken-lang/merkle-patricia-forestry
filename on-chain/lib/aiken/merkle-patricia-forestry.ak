@@ -106,7 +106,10 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
 /// requires a [Proof](#Proof) of inclusion for the element. The latter can be
 /// obtained off-chain from the whole trie containing the element.
 ///
-/// Returns `False` when the element isn't in the tree.
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the key IS NOT in the trie.
+/// > It only indicates that it isn't present with the given value. To prove
+/// > exclusion of a key, use [`miss`](#miss).
 pub fn has(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -114,6 +117,20 @@ pub fn has(
   proof: Proof,
 ) -> Bool {
   including(key, value, proof) == self.root
+}
+
+/// since | <code>1.2.0</code>
+/// ---   | ---
+///
+/// Test whether a key is missing from the trie. This requires a
+/// [Proof](#Proof) of exclusion for the element. The latter can be obtained
+/// off-chain from the whole trie containing the element.
+///
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the element IS in the trie.
+/// > To prove inclusion, use [`has`](#has).
+pub fn miss(self: MerklePatriciaForestry, key: ByteArray, proof: Proof) -> Bool {
+  excluding(key, proof) == self.root
 }
 
 // # Modifying
