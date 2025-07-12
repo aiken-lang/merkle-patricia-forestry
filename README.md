@@ -44,7 +44,7 @@ See [off-chain](./off-chain#readme) for usage.
 ### On-chain (Aiken)
 
 ```bash
-aiken add aiken-lang/merkle-patricia-forestry --version 2.0.1
+aiken add aiken-lang/merkle-patricia-forestry --version 2.1.0
 ```
 
 See [on-chain](./on-chain#readme) for usage.

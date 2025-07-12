@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Fixed proof verification for forks with non-empty prefixes.
+- Fixed proof verification for terminal forks with non-empty prefixes.
 
 ### Removed
 
