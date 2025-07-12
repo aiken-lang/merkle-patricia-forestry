@@ -375,7 +375,9 @@ export class Trie {
    */
   async prove(key, allowMissing = false) {
     try {
-      return await this.walk(intoPath(key));
+      return this.isEmpty() && allowMissing
+        ? new Proof(intoPath(key), undefined, [])
+        : await this.walk(intoPath(key));
     } catch(e) {
       if (!allowMissing) {
         throw e;
@@ -394,7 +396,9 @@ export class Trie {
       try {
         return await this.store.batch(async () => {
           const hash = this.hash;
-          await tryInsert(this, key, "");
+          this instanceof Branch
+            ? await tryInsert(this, key, "")
+            : await this.insert(key, "");
           const proof = await this.prove(key);
           proof.setValue(undefined);
           await tryDelete(this, key);
@@ -1231,14 +1235,24 @@ export class Proof {
    * @param {bool} [includingItem=true]
    *   When set, computes the resulting root hash considering the underlying
    *   value is in the trie.
-   * @return {Buffer}
+   * @return {Buffer|null}
    *   A resulting hash as a byte buffer, to be compared with a known root.
+   *   Returns null when the resulting hash is an empty trie (e.g. when
+   *   checking an empty proof in exclusion).
    */
-  verify(includingItem = true) {
+  verify(includingItem = true, key) {
     assert(
       !(includingItem && this.#value === undefined),
       "attempted to verify an inclusion proof without value: use 'proof.setValue(..)', or build a new proof."
     );
+
+    if (this.#steps.length === 0) {
+      if (includingItem) {
+        return Leaf.computeHash(this.#path, digest(this.#value));
+      } else {
+        return null;
+      }
+    }
 
     const loop = (cursor, ix) => {
       const step = this.#steps[ix];
