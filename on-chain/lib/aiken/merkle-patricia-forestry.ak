@@ -197,7 +197,7 @@ pub fn update(
   proof: Proof,
   old_value: ByteArray,
   new_value: ByteArray,
-) {
+) -> MerklePatriciaForestry {
   expect including(key, old_value, proof) == self.root
   // If we were doing a delete followed by an insert, we'd end up checking the `excluding` again here
   MerklePatriciaForestry { root: including(key, new_value, proof) }
