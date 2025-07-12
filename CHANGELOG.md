@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.0 - UNRELEASED
+## v2.1.0 - 2025-07-12
 
 ### Added
 
@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Fixed proof verification for forks with non-empty prefixes.
+- Fixed proof verification for terminal forks with non-empty prefixes.
 
 ### Removed
 

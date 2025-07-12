@@ -1,0 +1,14 @@
+{
+  "preamble": {
+    "title": "aiken-lang/merkle-patricia-forestry",
+    "description": "Aiken contracts for project 'aiken-lang/merkle-patricia-forestry'",
+    "version": "2.1.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.17+c3a7fba"
+    },
+    "license": "MPL-2.0"
+  },
+  "validators": []
+}
