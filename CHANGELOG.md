@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.3 - UNRELEASED
+
+### Added
+
+- New function `miss` to verify non-membership for keys using proofs of exclusions.
+
+### Changed
+
+- Fixed proof verification for forks with non-empty prefixes.
+
+### Removed
+
+N/A
+
 ## v1.1.2 - 2025-07-12
 
 ### Added
