@@ -111,7 +111,10 @@ pub fn is_empty(self: MerklePatriciaForestry) -> Bool {
 /// requires a [Proof](#Proof) of inclusion for the element. The latter can be
 /// obtained off-chain from the whole trie containing the element.
 ///
-/// Returns `False` when the element isn't in the tree.
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the key IS NOT in the trie.
+/// > It only indicates that it isn't present with the given value. To prove
+/// > exclusion of a key, use [`miss`](#miss).
 pub fn has(
   self: MerklePatriciaForestry,
   key: ByteArray,
@@ -119,6 +122,20 @@ pub fn has(
   proof: Proof,
 ) -> Bool {
   including(key, value, proof) == self.root
+}
+
+/// since | <code>1.2.0</code>
+/// ---   | ---
+///
+/// Test whether a key is missing from the trie. This requires a
+/// [Proof](#Proof) of exclusion for the element. The latter can be obtained
+/// off-chain from the whole trie containing the element.
+///
+/// > [!CAUTION]
+/// > `False` doesn't necessarily indicate that the element IS in the trie.
+/// > To prove inclusion, use [`has`](#has).
+pub fn miss(self: MerklePatriciaForestry, key: ByteArray, proof: Proof) -> Bool {
+  excluding(key, proof) == self.root
 }
 
 /// since | <code>1.0.0</code>
@@ -242,6 +259,12 @@ fn including(key: ByteArray, value: ByteArray, proof: Proof) -> ByteArray {
   do_including(blake2b_256(key), blake2b_256(value), 0, proof)
 }
 
+test including_empty_proof() {
+  let (k, v) = ("foo", "bar")
+  let path = blake2b_256(k)
+  including(k, v, []) == combine(suffix(path, 0), blake2b_256(v))
+}
+
 fn do_including(
   path: ByteArray,
   value: ByteArray,
@@ -289,6 +312,10 @@ fn do_including(
 /// So this mainly changes the last step.
 fn excluding(key: ByteArray, proof: Proof) -> ByteArray {
   do_excluding(blake2b_256(key), 0, proof)
+}
+
+test excluding_empty_proof() {
+  excluding("foo", []) == empty().root
 }
 
 fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
@@ -385,4 +412,61 @@ fn do_fork(
       combine(neighbor.prefix, neighbor.root),
     ),
   )
+}
+
+// -----------------------------------------------------------------------------
+// -------------------------------------------------- Foreign Function Interface
+// -----------------------------------------------------------------------------
+
+/// A version of 'has' that unwraps the opaque arguments, to allow being exported.
+fn has_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> Bool {
+  including(key, value, proof) == self
+}
+
+test disable_unused_warning_has_ffi() fail {
+  has_ffi("", "", "", [])
+}
+
+/// A version of 'miss' that unwraps the opaque arguments, to allow being exported.
+fn miss_ffi(self: ByteArray, key: ByteArray, proof: Proof) -> Bool {
+  excluding(key, proof) == self
+}
+
+test disable_unused_warning_miss_ffi() fail {
+  miss_ffi("", "", [])
+}
+
+/// A version of 'insert' that unwraps the opaque arguments, to allow being exported.
+fn insert_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect excluding(key, proof) == self
+  including(key, value, proof)
+}
+
+test disable_unused_warning_insert_ffi() fail {
+  insert_ffi("", "", "", []) == ""
+}
+
+/// A version of 'delete' that unwraps the opaque arguments, to allow being exported.
+fn delete_ffi(
+  self: ByteArray,
+  key: ByteArray,
+  value: ByteArray,
+  proof: Proof,
+) -> ByteArray {
+  expect including(key, value, proof) == self
+  excluding(key, proof)
+}
+
+test disable_unused_warning_delete_ffi() fail {
+  delete_ffi("", "", "", []) == ""
 }
