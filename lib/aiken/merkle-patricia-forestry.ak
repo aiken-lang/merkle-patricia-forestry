@@ -252,29 +252,29 @@ fn do_including(
     [] -> combine(suffix(path, cursor), value)
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_including(path, value, nextCursor + 1, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors)
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
+      do_branch(path, cursor, next_cursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_including(path, value, nextCursor + 1, steps)
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
 
     [Leaf { skip, key, value: neighborValue }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_including(path, value, nextCursor + 1, steps)
+      let next_cursor = cursor + skip
+      let root = do_including(path, value, next_cursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor + 1),
-          nibble: nibble(key, nextCursor),
+          prefix: suffix(key, next_cursor + 1),
+          nibble: nibble(key, next_cursor),
           root: neighborValue,
         }
 
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
   }
 }
@@ -296,9 +296,9 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
     [] -> null_hash
 
     [Branch { skip, neighbors }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_excluding(path, nextCursor + 1, steps)
-      do_branch(path, cursor, nextCursor, root, neighbors)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
+      do_branch(path, cursor, next_cursor, root, neighbors)
     }
 
     [Fork { skip, neighbor }] -> {
@@ -316,25 +316,25 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
     }
 
     [Fork { skip, neighbor }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_excluding(path, nextCursor + 1, steps)
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
 
     [Leaf { key, value, .. }] -> combine(suffix(key, cursor), value)
 
     [Leaf { skip, key, value }, ..steps] -> {
-      let nextCursor = cursor + skip
-      let root = do_excluding(path, nextCursor + 1, steps)
+      let next_cursor = cursor + skip
+      let root = do_excluding(path, next_cursor + 1, steps)
 
       let neighbor =
         Neighbor {
-          prefix: suffix(key, nextCursor + 1),
-          nibble: nibble(key, nextCursor),
+          prefix: suffix(key, next_cursor + 1),
+          nibble: nibble(key, next_cursor),
           root: value,
         }
 
-      do_fork(path, cursor, nextCursor, root, neighbor)
+      do_fork(path, cursor, next_cursor, root, neighbor)
     }
   }
 }
@@ -346,13 +346,13 @@ fn do_excluding(path: ByteArray, cursor: Int, proof: Proof) -> ByteArray {
 fn do_branch(
   path: ByteArray,
   cursor: Int,
-  nextCursor: Int,
+  next_cursor: Int,
   root: ByteArray,
   neighbors: ByteArray,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor)
+  let branch = nibble(path, next_cursor)
 
-  let prefix = nibbles(path, cursor, nextCursor)
+  let prefix = nibbles(path, cursor, next_cursor)
 
   combine(
     prefix,
@@ -370,13 +370,13 @@ fn do_branch(
 fn do_fork(
   path: ByteArray,
   cursor: Int,
-  nextCursor: Int,
+  next_cursor: Int,
   root: ByteArray,
   neighbor: Neighbor,
 ) -> ByteArray {
-  let branch = nibble(path, nextCursor)
+  let branch = nibble(path, next_cursor)
 
-  let prefix = nibbles(path, cursor, nextCursor)
+  let prefix = nibbles(path, cursor, next_cursor)
 
   expect branch != neighbor.nibble
 

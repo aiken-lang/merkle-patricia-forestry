@@ -88,19 +88,22 @@ pub fn merkle_2(branch: Int, root: ByteArray, neighbor: ByteArray) -> ByteArray 
 
 pub fn sparse_merkle_16(
   me: Int,
-  meHash: ByteArray,
+  me_hash: ByteArray,
   neighbor: Int,
-  neighborHash: ByteArray,
+  neighbor_hash: ByteArray,
 ) -> ByteArray {
   if me < 8 {
     if neighbor < 8 {
-      combine(sparse_merkle_8(me, meHash, neighbor, neighborHash), null_hash_8)
+      combine(
+        sparse_merkle_8(me, me_hash, neighbor, neighbor_hash),
+        null_hash_8,
+      )
     } else {
       combine(
-        merkle_8(me, meHash, null_hash_4, null_hash_2, null_hash),
+        merkle_8(me, me_hash, null_hash_4, null_hash_2, null_hash),
         merkle_8(
           neighbor - 8,
-          neighborHash,
+          neighbor_hash,
           null_hash_4,
           null_hash_2,
           null_hash,
@@ -111,12 +114,12 @@ pub fn sparse_merkle_16(
     if neighbor >= 8 {
       combine(
         null_hash_8,
-        sparse_merkle_8(me - 8, meHash, neighbor - 8, neighborHash),
+        sparse_merkle_8(me - 8, me_hash, neighbor - 8, neighbor_hash),
       )
     } else {
       combine(
-        merkle_8(neighbor, neighborHash, null_hash_4, null_hash_2, null_hash),
-        merkle_8(me - 8, meHash, null_hash_4, null_hash_2, null_hash),
+        merkle_8(neighbor, neighbor_hash, null_hash_4, null_hash_2, null_hash),
+        merkle_8(me - 8, me_hash, null_hash_4, null_hash_2, null_hash),
       )
     }
   }
@@ -124,29 +127,32 @@ pub fn sparse_merkle_16(
 
 pub fn sparse_merkle_8(
   me: Int,
-  meHash: ByteArray,
+  me_hash: ByteArray,
   neighbor: Int,
-  neighborHash: ByteArray,
+  neighbor_hash: ByteArray,
 ) -> ByteArray {
   if me < 4 {
     if neighbor < 4 {
-      combine(sparse_merkle_4(me, meHash, neighbor, neighborHash), null_hash_4)
+      combine(
+        sparse_merkle_4(me, me_hash, neighbor, neighbor_hash),
+        null_hash_4,
+      )
     } else {
       combine(
-        merkle_4(me, meHash, null_hash_2, null_hash),
-        merkle_4(neighbor - 4, neighborHash, null_hash_2, null_hash),
+        merkle_4(me, me_hash, null_hash_2, null_hash),
+        merkle_4(neighbor - 4, neighbor_hash, null_hash_2, null_hash),
       )
     }
   } else {
     if neighbor >= 4 {
       combine(
         null_hash_4,
-        sparse_merkle_4(me - 4, meHash, neighbor - 4, neighborHash),
+        sparse_merkle_4(me - 4, me_hash, neighbor - 4, neighbor_hash),
       )
     } else {
       combine(
-        merkle_4(neighbor, neighborHash, null_hash_2, null_hash),
-        merkle_4(me - 4, meHash, null_hash_2, null_hash),
+        merkle_4(neighbor, neighbor_hash, null_hash_2, null_hash),
+        merkle_4(me - 4, me_hash, null_hash_2, null_hash),
       )
     }
   }
@@ -154,26 +160,26 @@ pub fn sparse_merkle_8(
 
 pub fn sparse_merkle_4(
   me: Int,
-  meHash: ByteArray,
+  me_hash: ByteArray,
   neighbor: Int,
-  neighborHash: ByteArray,
+  neighbor_hash: ByteArray,
 ) -> ByteArray {
   if me < 2 {
     if neighbor < 2 {
-      combine(merkle_2(me, meHash, neighborHash), null_hash_2)
+      combine(merkle_2(me, me_hash, neighbor_hash), null_hash_2)
     } else {
       combine(
-        merkle_2(me, meHash, null_hash),
-        merkle_2(neighbor - 2, neighborHash, null_hash),
+        merkle_2(me, me_hash, null_hash),
+        merkle_2(neighbor - 2, neighbor_hash, null_hash),
       )
     }
   } else {
     if neighbor >= 2 {
-      combine(null_hash_2, merkle_2(me - 2, meHash, neighborHash))
+      combine(null_hash_2, merkle_2(me - 2, me_hash, neighbor_hash))
     } else {
       combine(
-        merkle_2(neighbor, neighborHash, null_hash),
-        merkle_2(me - 2, meHash, null_hash),
+        merkle_2(neighbor, neighbor_hash, null_hash),
+        merkle_2(me - 2, me_hash, null_hash),
       )
     }
   }
