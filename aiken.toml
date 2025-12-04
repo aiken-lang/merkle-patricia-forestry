@@ -1,5 +1,5 @@
 name = "aiken-lang/merkle-patricia-forestry"
-version = "1.1.2"
+version = "1.2.0"
 license = "MPL-2.0"
 description = "Aiken contracts for project 'aiken-lang/merkle-patricia-forestry'"
 
@@ -15,5 +15,5 @@ source = "github"
 
 [[dependencies]]
 name = "aiken-lang/fuzz"
-version = "main"
+version = "1.0.0"
 source = "github"

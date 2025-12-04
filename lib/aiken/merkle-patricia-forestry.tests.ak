@@ -648,6 +648,20 @@ test example_fake_update() fail {
 
 // -------------------- Some notable cases
 
+test example_excluding_empty_proof(key via fuzz.bytearray_between(0, 32)) {
+  mpf.miss(mpf.empty(), key, [])
+}
+
+test example_including_empty_proof(
+  operands via fuzz.both(
+    fuzz.bytearray_between(0, 32),
+    fuzz.bytearray_between(0, 32),
+  ),
+) fail {
+  let (key, value) = operands
+  mpf.has(mpf.empty(), key, value, [])
+}
+
 test example_insert_whatever() {
   let root = mpf.insert(without_kiwi(), kiwi, "foo", proof_kiwi())
   root != trie()
